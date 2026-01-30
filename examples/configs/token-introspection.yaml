@@ -1,0 +1,30 @@
+# Example configuration for OAuth introspection mode
+
+server:
+  reverseProxyPort: 8080
+  forwardProxyPort: 8081
+  readTimeout: "30s"
+  writeTimeout: "30s"
+
+reverseProxy:
+  backend: "http://127.0.0.1:9090"
+  verification:
+    mode: "introspection"
+    introspection:
+      endpoint: "https://oauth.example.com/introspect"
+      clientId: "klaviger-client"
+      clientSecret: "${INTROSPECTION_SECRET}"
+
+forwardProxy:
+  defaultMode:
+    type: "passthrough"
+  hostRules: []
+
+observability:
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+  logging:
+    level: "info"
+    format: "json"

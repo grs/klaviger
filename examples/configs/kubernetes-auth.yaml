@@ -1,0 +1,48 @@
+# Example configuration for Kubernetes verification mode
+#
+# This mode uses Kubernetes SelfSubjectAccessReview for token validation and authorization.
+
+server:
+  reverseProxyPort: 8180
+  reverseProxyBind: "0.0.0.0"  # Listen on all interfaces for reverse proxy (receives external traffic)
+  forwardProxyPort: 8181
+  forwardProxyBind: "127.0.0.1"  # Listen only on loopback for forward proxy (pod-internal only)
+  readTimeout: "30s"
+  writeTimeout: "30s"
+
+reverseProxy:
+  backend: "http://127.0.0.1:8080"
+  verification:
+    mode: "k8s"
+    kubernetes:
+      verb: "get"
+      resource: "pods"
+      apiGroup: ""
+      # namespace: "default"  # Optional: if omitted, will auto-detect from /var/run/secrets/kubernetes.io/serviceaccount/namespace when running in Kubernetes
+
+    # Alternative: Use JWT verification with Kubernetes JWKS endpoint
+    # mode: "jwt"
+    # jwt:
+    #   jwksUrl: "https://kubernetes.default.svc/openid/v1/jwks"
+    #   issuer: "https://kubernetes.default.svc"
+    #   audience: "my-service"
+    #   cacheTtl: "5m"
+    #   bearerTokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token"  # Path to service account token for authenticating to JWKS endpoint
+    #   caFile: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"  # Path to CA certificate for verifying Kubernetes API server TLS
+
+forwardProxy:
+  defaultMode:
+    type: "file"
+    file:
+      path: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+      refreshInterval: "1m"
+  hostRules: []
+
+observability:
+  metrics:
+    enabled: true
+    port: 8190
+    path: "/metrics"
+  logging:
+    level: "debug"
+    format: "json"

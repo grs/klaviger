@@ -1,0 +1,396 @@
+---
+# Alpha Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: alpha
+  labels:
+    app: showme
+    instance: alpha
+spec:
+  selector:
+    app: showme
+    instance: alpha
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8180
+    protocol: TCP
+  type: ClusterIP
+---
+# Alpha Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: alpha
+  labels:
+    app: showme
+    instance: alpha
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: showme
+      instance: alpha
+  template:
+    metadata:
+      labels:
+        app: showme
+        instance: alpha
+    spec:
+      serviceAccountName: alpha
+      containers:
+      - name: showme
+        image: quay.io/gordons/showme:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: NAME
+          value: "alpha"
+        - name: PORT
+          value: "8080"
+        - name: BIND_ADDRESS
+          value: "127.0.0.1"
+        - name: HTTP_PROXY
+          value: "http://127.0.0.1:8181"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      - name: klaviger
+        image: quay.io/gordons/klaviger:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8180
+          name: reverse-proxy
+          protocol: TCP
+        - containerPort: 8190
+          name: metrics
+          protocol: TCP
+        args:
+        - "--config"
+        - "/etc/klaviger/config.yaml"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+# Beta Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: beta
+  labels:
+    app: showme
+    instance: beta
+spec:
+  selector:
+    app: showme
+    instance: beta
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8180
+    protocol: TCP
+  type: ClusterIP
+---
+# Beta Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: beta
+  labels:
+    app: showme
+    instance: beta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: showme
+      instance: beta
+  template:
+    metadata:
+      labels:
+        app: showme
+        instance: beta
+    spec:
+      serviceAccountName: beta
+      containers:
+      - name: showme
+        image: quay.io/gordons/showme:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: NAME
+          value: "beta"
+        - name: PORT
+          value: "8080"
+        - name: BIND_ADDRESS
+          value: "127.0.0.1"
+        - name: HTTP_PROXY
+          value: "http://127.0.0.1:8181"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      - name: klaviger
+        image: quay.io/gordons/klaviger:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8180
+          name: reverse-proxy
+          protocol: TCP
+        - containerPort: 8190
+          name: metrics
+          protocol: TCP
+        args:
+        - "--config"
+        - "/etc/klaviger/config.yaml"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+# Gamma Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: gamma
+  labels:
+    app: showme
+    instance: gamma
+spec:
+  selector:
+    app: showme
+    instance: gamma
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8180
+    protocol: TCP
+  type: ClusterIP
+---
+# Gamma Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: gamma
+  labels:
+    app: showme
+    instance: gamma
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: showme
+      instance: gamma
+  template:
+    metadata:
+      labels:
+        app: showme
+        instance: gamma
+    spec:
+      serviceAccountName: gamma
+      containers:
+      - name: showme
+        image: quay.io/gordons/showme:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: NAME
+          value: "gamma"
+        - name: PORT
+          value: "8080"
+        - name: BIND_ADDRESS
+          value: "127.0.0.1"
+        - name: HTTP_PROXY
+          value: "http://127.0.0.1:8181"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      - name: klaviger
+        image: quay.io/gordons/klaviger:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8180
+          name: reverse-proxy
+          protocol: TCP
+        - containerPort: 8190
+          name: metrics
+          protocol: TCP
+        args:
+        - "--config"
+        - "/etc/klaviger/config.yaml"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+# Delta Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: delta
+  labels:
+    app: showme
+    instance: delta
+spec:
+  selector:
+    app: showme
+    instance: delta
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8180
+    protocol: TCP
+  type: ClusterIP
+---
+# Delta Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: delta
+  labels:
+    app: showme
+    instance: delta
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: showme
+      instance: delta
+  template:
+    metadata:
+      labels:
+        app: showme
+        instance: delta
+    spec:
+      serviceAccountName: delta
+      containers:
+      - name: showme
+        image: quay.io/gordons/showme:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        env:
+        - name: NAME
+          value: "delta"
+        - name: PORT
+          value: "8080"
+        - name: BIND_ADDRESS
+          value: "127.0.0.1"
+        - name: HTTP_PROXY
+          value: "http://127.0.0.1:8181"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+      - name: klaviger
+        image: quay.io/gordons/klaviger:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 8180
+          name: reverse-proxy
+          protocol: TCP
+        - containerPort: 8190
+          name: metrics
+          protocol: TCP
+        args:
+        - "--config"
+        - "/etc/klaviger/config.yaml"
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1001
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "64Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"

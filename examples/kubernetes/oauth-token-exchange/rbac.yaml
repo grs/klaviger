@@ -1,0 +1,70 @@
+---
+# ServiceAccount for alpha deployment
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: alpha
+  labels:
+    app: showme
+    instance: alpha
+---
+# ServiceAccount for beta deployment
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: beta
+  labels:
+    app: showme
+    instance: beta
+---
+# ServiceAccount for gamma deployment
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: gamma
+  labels:
+    app: showme
+    instance: gamma
+---
+# ServiceAccount for delta deployment
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: delta
+  labels:
+    app: showme
+    instance: delta
+---
+# Role for Kubernetes access
+# Example role - adjust permissions based on your needs
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: showme-access
+  labels:
+    app: showme
+rules:
+- apiGroups: [""]
+  resources: ["pods"]
+  verbs: ["get"]
+---
+# RoleBinding to grant all showme ServiceAccounts the necessary permissions
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: showme-access
+  labels:
+    app: showme
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: showme-access
+subjects:
+- kind: ServiceAccount
+  name: alpha
+- kind: ServiceAccount
+  name: beta
+- kind: ServiceAccount
+  name: gamma
+- kind: ServiceAccount
+  name: delta

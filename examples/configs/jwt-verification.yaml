@@ -1,0 +1,52 @@
+# Example configuration for JWT verification mode
+
+server:
+  reverseProxyPort: 8080
+  # reverseProxyBind: "0.0.0.0"  # Optional: IP address to bind reverse proxy (default: 0.0.0.0)
+  forwardProxyPort: 8081
+  # forwardProxyBind: "0.0.0.0"  # Optional: IP address to bind forward proxy (default: 0.0.0.0, use 127.0.0.1 for localhost only)
+  readTimeout: "30s"
+  writeTimeout: "30s"
+  tls:
+    enabled: false
+    # For TLS:
+    # enabled: true
+    # certFile: "/etc/klaviger/tls/cert.pem"
+    # keyFile: "/etc/klaviger/tls/key.pem"
+
+reverseProxy:
+  backend: "http://127.0.0.1:9090"
+  verification:
+    mode: "jwt"
+    jwt:
+      jwksUrl: "https://auth.example.com/.well-known/jwks.json"
+      issuer: "https://auth.example.com"
+      audience: "my-api"
+      requiredScopes: ["read:data", "write:data"]
+      cacheTtl: "5m"
+      # bearerTokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token"  # Optional: Path to bearer token file for authenticating to JWKS endpoint (e.g., for Kubernetes)
+      # caFile: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"  # Optional: Path to CA certificate file for verifying JWKS endpoint TLS (e.g., for Kubernetes)
+
+forwardProxy:
+  defaultMode:
+    type: "passthrough"
+  hostRules:
+    - hostPattern: "api.example.com"
+      mode:
+        type: "file"
+        file:
+          path: "/var/run/secrets/api-token"
+          refreshInterval: "1m"
+
+observability:
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+  tracing:
+    enabled: false
+    endpoint: "http://jaeger:4318"
+    serviceName: "klaviger"
+  logging:
+    level: "info"
+    format: "json"

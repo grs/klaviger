@@ -1,0 +1,308 @@
+---
+# Mock OAuth Token Exchange Server
+# This is a simple mock server that implements RFC 8693 token exchange
+# for demonstration purposes only - NOT for production use
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: oauth-server-script
+  labels:
+    app: oauth-server
+data:
+  server.py: |
+    #!/usr/bin/env python3
+    """
+    Mock OAuth 2.0 Token Exchange Server (RFC 8693)
+
+    This server accepts token exchange requests and returns JWT tokens
+    for demonstration purposes. It validates the incoming service account
+    token and returns a scoped access token.
+
+    NOT FOR PRODUCTION USE - This is a demo/testing server only.
+    """
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    import json
+    import base64
+    import time
+    import hashlib
+    import hmac
+    from urllib.parse import parse_qs
+
+    # Simple symmetric key for signing JWTs (in production, use asymmetric keys)
+    JWT_SECRET = "demo-secret-key-do-not-use-in-production"
+
+    def base64url_encode(data):
+        """Base64URL encode without padding"""
+        if isinstance(data, str):
+            data = data.encode('utf-8')
+        return base64.urlsafe_b64encode(data).decode('utf-8').rstrip('=')
+
+    def base64url_decode(data):
+        """Base64URL decode with padding"""
+        # Add padding if necessary
+        padding = 4 - (len(data) % 4)
+        if padding != 4:
+            data += '=' * padding
+        return base64.urlsafe_b64decode(data)
+
+    def extract_sub_from_jwt(token):
+        """Extract sub claim from JWT token without validation"""
+        try:
+            # Split token into parts
+            parts = token.split('.')
+            if len(parts) != 3:
+                return None
+
+            # Decode payload (second part)
+            payload_json = base64url_decode(parts[1]).decode('utf-8')
+            payload = json.loads(payload_json)
+
+            # Return sub claim if present
+            return payload.get('sub')
+        except Exception as e:
+            print(json.dumps({
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "level": "warning",
+                "component": "oauth-server",
+                "message": f"Failed to extract sub from subject token: {e}"
+            }))
+            return None
+
+    def create_jwt(payload):
+        """Create a simple HS256 JWT"""
+        header = {
+            "alg": "HS256",
+            "typ": "JWT",
+            "kid": "demo-key-1"
+        }
+
+        header_encoded = base64url_encode(json.dumps(header))
+        payload_encoded = base64url_encode(json.dumps(payload))
+
+        message = f"{header_encoded}.{payload_encoded}"
+        signature = base64url_encode(
+            hmac.new(JWT_SECRET.encode(), message.encode(), hashlib.sha256).digest()
+        )
+
+        return f"{message}.{signature}"
+
+    class TokenExchangeHandler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            """Override to use JSON logging"""
+            print(json.dumps({
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "level": "info",
+                "component": "oauth-server",
+                "message": format % args,
+                "client": self.client_address[0]
+            }))
+
+        def do_POST(self):
+            if self.path != '/token':
+                self.send_error(404, "Not Found")
+                return
+
+            # Read request body
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length).decode('utf-8')
+            params = parse_qs(body)
+
+            # Validate grant type
+            grant_type = params.get('grant_type', [''])[0]
+            if grant_type != 'urn:ietf:params:oauth:grant-type:token-exchange':
+                self.send_json_error(400, "invalid_grant", "Invalid grant_type")
+                return
+
+            # Extract subject token
+            subject_token = params.get('subject_token', [''])[0]
+            if not subject_token:
+                self.send_json_error(400, "invalid_request", "Missing subject_token")
+                return
+
+            # Validate Authorization header (should contain K8s SA token or JWT-SVID)
+            auth_header = self.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                self.send_json_error(401, "invalid_client", "Missing or invalid authorization")
+                return
+
+            auth_token = auth_header[7:]  # Remove "Bearer " prefix
+
+            # Extract audience and scope
+            audience = params.get('audience', ['default'])[0]
+            scope = params.get('scope', [''])[0]
+
+            # Extract sub claim from subject token
+            subject_sub = extract_sub_from_jwt(subject_token)
+            if not subject_sub:
+                # Fallback to a default if extraction fails
+                subject_sub = "unknown-subject"
+
+            # Extract sub claim from auth token (bearer token) for act claim
+            actor_sub = extract_sub_from_jwt(auth_token)
+
+            # Log the exchange request
+            print(json.dumps({
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "level": "info",
+                "component": "oauth-server",
+                "event": "token_exchange",
+                "subject_token_prefix": subject_token[:20] + "..." if len(subject_token) > 20 else subject_token,
+                "auth_token_prefix": auth_token[:20] + "..." if len(auth_token) > 20 else auth_token,
+                "subject_sub": subject_sub,
+                "actor_sub": actor_sub,
+                "audience": audience,
+                "scope": scope
+            }))
+
+            # Generate JWT access token
+            now = int(time.time())
+            token_payload = {
+                "iss": "http://oauth-server",
+                "sub": subject_sub,
+                "aud": audience,
+                "scope": scope,
+                "iat": now,
+                "exp": now + 3600,  # 1 hour expiry
+                "nbf": now
+            }
+
+            # Add act claim if actor_sub was successfully extracted (RFC 8693)
+            if actor_sub:
+                token_payload["act"] = {
+                    "sub": actor_sub
+                }
+
+            jwt_token = create_jwt(token_payload)
+
+            # Return token exchange response
+            response = {
+                "access_token": jwt_token,
+                "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
+                "token_type": "Bearer",
+                "expires_in": 3600,
+                "scope": scope
+            }
+
+            self.send_json_response(200, response)
+
+        def do_GET(self):
+            if self.path == '/health':
+                self.send_json_response(200, {"status": "healthy"})
+            elif self.path == '/.well-known/jwks.json':
+                # Return JWKS with the symmetric key (for demo purposes)
+                # In production, use asymmetric keys (RS256) with public key in JWKS
+                # For HS256 demo, we return a minimal JWKS structure
+                # Note: Klaviger will need the same secret for HS256 verification
+                jwks = {
+                    "keys": [
+                        {
+                            "kty": "oct",
+                            "kid": "demo-key-1",
+                            "alg": "HS256",
+                            "k": base64url_encode(JWT_SECRET)
+                        }
+                    ]
+                }
+                self.send_json_response(200, jwks)
+            else:
+                self.send_error(404, "Not Found")
+
+        def send_json_response(self, status_code, data):
+            self.send_response(status_code)
+            self.send_header('Content-Type', 'application/json')
+            self.end_headers()
+            self.wfile.write(json.dumps(data).encode())
+
+        def send_json_error(self, status_code, error, error_description):
+            self.send_json_response(status_code, {
+                "error": error,
+                "error_description": error_description
+            })
+
+    if __name__ == '__main__':
+        server = HTTPServer(('0.0.0.0', 8080), TokenExchangeHandler)
+        print(json.dumps({
+            "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "level": "info",
+            "component": "oauth-server",
+            "message": "Mock OAuth token exchange server starting",
+            "port": 8080
+        }))
+        server.serve_forever()
+---
+# OAuth Server Service
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth-server
+  labels:
+    app: oauth-server
+spec:
+  selector:
+    app: oauth-server
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+---
+# OAuth Server Deployment
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: oauth-server
+  labels:
+    app: oauth-server
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: oauth-server
+  template:
+    metadata:
+      labels:
+        app: oauth-server
+    spec:
+      containers:
+      - name: oauth-server
+        image: python:3.11-alpine
+        command: ["python3", "/app/server.py"]
+        ports:
+        - containerPort: 8080
+          name: http
+          protocol: TCP
+        volumeMounts:
+        - name: server-script
+          mountPath: /app
+        securityContext:
+          runAsNonRoot: true
+          runAsUser: 1000
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            memory: "32Mi"
+            cpu: "50m"
+          limits:
+            memory: "128Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+      volumes:
+      - name: server-script
+        configMap:
+          name: oauth-server-script
+          defaultMode: 0755

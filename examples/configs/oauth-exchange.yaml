@@ -1,0 +1,43 @@
+# Example configuration for OAuth token exchange mode
+
+server:
+  reverseProxyPort: 8080
+  forwardProxyPort: 8081
+  readTimeout: "30s"
+  writeTimeout: "30s"
+
+reverseProxy:
+  backend: "http://127.0.0.1:9090"
+  verification:
+    mode: "jwt"
+    jwt:
+      jwksUrl: "https://auth.example.com/.well-known/jwks.json"
+      issuer: "https://auth.example.com"
+      audience: "my-api"
+      cacheTtl: "5m"
+
+forwardProxy:
+  defaultMode:
+    type: "passthrough"
+  hostRules:
+    - hostPattern: "api.example.com"
+      mode:
+        type: "oauth"
+        oauth:
+          tokenUrl: "https://oauth.example.com/token"
+          audience: "https://api.example.com"
+          scope: "api:access"
+          cacheTtl: "10m"
+
+observability:
+  metrics:
+    enabled: true
+    port: 9090
+    path: "/metrics"
+  tracing:
+    enabled: true
+    endpoint: "http://jaeger:4318"
+    serviceName: "klaviger"
+  logging:
+    level: "info"
+    format: "json"

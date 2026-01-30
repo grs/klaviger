@@ -1,0 +1,282 @@
+---
+# ConfigMap for Alpha's Klaviger configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: klaviger-config-alpha
+  labels:
+    app: showme
+    instance: alpha
+data:
+  config.yaml: |
+    server:
+      reverseProxyPort: 8180
+      reverseProxyBind: "0.0.0.0"
+      forwardProxyPort: 8181
+      forwardProxyBind: "127.0.0.1"
+      readTimeout: "30s"
+      writeTimeout: "30s"
+      tls:
+        enabled: false
+
+    reverseProxy:
+      backend: "http://127.0.0.1:8080"
+      verification:
+        mode: "jwt"
+        jwt:
+          jwksUrl: "https://kubernetes.default.svc/openid/v1/jwks"
+          issuer: "https://kubernetes.default.svc.cluster.local"
+          audience: "https://kubernetes.default.svc.cluster.local"
+          cacheTtl: "5m"
+          bearerTokenFile: "/var/run/secrets/kubernetes.io/serviceaccount/token"
+          caFile: "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+
+    forwardProxy:
+      defaultMode:
+        type: "passthrough"
+      hostRules:
+      - hostPattern: "^beta(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "beta-service"
+            scope: "read write"
+            cacheTtl: "5m"
+      - hostPattern: "^gamma(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "gamma-service"
+            scope: "read"
+            cacheTtl: "5m"
+      - hostPattern: "^delta(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "delta-service"
+            scope: "write"
+            cacheTtl: "5m"
+
+    observability:
+      metrics:
+        enabled: true
+        port: 8190
+        path: "/metrics"
+      tracing:
+        enabled: false
+      logging:
+        level: "debug"
+        format: "json"
+---
+# ConfigMap for Beta's Klaviger configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: klaviger-config-beta
+  labels:
+    app: showme
+    instance: beta
+data:
+  config.yaml: |
+    server:
+      reverseProxyPort: 8180
+      reverseProxyBind: "0.0.0.0"
+      forwardProxyPort: 8181
+      forwardProxyBind: "127.0.0.1"
+      readTimeout: "30s"
+      writeTimeout: "30s"
+      tls:
+        enabled: false
+
+    reverseProxy:
+      backend: "http://127.0.0.1:8080"
+      verification:
+        mode: "jwt"
+        jwt:
+          jwksUrl: "http://oauth-server/.well-known/jwks.json"
+          issuer: "http://oauth-server"
+          audience: "beta-service"
+          cacheTtl: "5m"
+
+    forwardProxy:
+      defaultMode:
+        type: "passthrough"
+      hostRules:
+      - hostPattern: "^alpha(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "alpha-service"
+            scope: "read"
+            cacheTtl: "5m"
+      - hostPattern: "^gamma(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "gamma-service"
+            scope: "read write"
+            cacheTtl: "5m"
+      - hostPattern: "^delta(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "delta-service"
+            scope: "read"
+            cacheTtl: "5m"
+
+    observability:
+      metrics:
+        enabled: true
+        port: 8190
+        path: "/metrics"
+      tracing:
+        enabled: false
+      logging:
+        level: "info"
+        format: "json"
+---
+# ConfigMap for Gamma's Klaviger configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: klaviger-config-gamma
+  labels:
+    app: showme
+    instance: gamma
+data:
+  config.yaml: |
+    server:
+      reverseProxyPort: 8180
+      reverseProxyBind: "0.0.0.0"
+      forwardProxyPort: 8181
+      forwardProxyBind: "127.0.0.1"
+      readTimeout: "30s"
+      writeTimeout: "30s"
+      tls:
+        enabled: false
+
+    reverseProxy:
+      backend: "http://127.0.0.1:8080"
+      verification:
+        mode: "jwt"
+        jwt:
+          jwksUrl: "http://oauth-server/.well-known/jwks.json"
+          issuer: "http://oauth-server"
+          audience: "gamma-service"
+          cacheTtl: "5m"
+
+    forwardProxy:
+      defaultMode:
+        type: "passthrough"
+      hostRules:
+      - hostPattern: "^alpha(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "alpha-service"
+            scope: "write"
+            cacheTtl: "5m"
+      - hostPattern: "^beta(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "beta-service"
+            scope: "read"
+            cacheTtl: "5m"
+      - hostPattern: "^delta(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "delta-service"
+            scope: "read write"
+            cacheTtl: "5m"
+
+    observability:
+      metrics:
+        enabled: true
+        port: 8190
+        path: "/metrics"
+      tracing:
+        enabled: false
+      logging:
+        level: "info"
+        format: "json"
+---
+# ConfigMap for Delta's Klaviger configuration
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: klaviger-config-delta
+  labels:
+    app: showme
+    instance: delta
+data:
+  config.yaml: |
+    server:
+      reverseProxyPort: 8180
+      reverseProxyBind: "0.0.0.0"
+      forwardProxyPort: 8181
+      forwardProxyBind: "127.0.0.1"
+      readTimeout: "30s"
+      writeTimeout: "30s"
+      tls:
+        enabled: false
+
+    reverseProxy:
+      backend: "http://127.0.0.1:8080"
+      verification:
+        mode: "jwt"
+        jwt:
+          jwksUrl: "http://oauth-server/.well-known/jwks.json"
+          issuer: "http://oauth-server"
+          audience: "delta-service"
+          cacheTtl: "5m"
+
+    forwardProxy:
+      defaultMode:
+        type: "passthrough"
+      hostRules:
+      - hostPattern: "^alpha(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "alpha-service"
+            scope: "read write"
+            cacheTtl: "5m"
+      - hostPattern: "^beta(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "beta-service"
+            scope: "write"
+            cacheTtl: "5m"
+      - hostPattern: "^gamma(:|$)"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "http://oauth-server/token"
+            audience: "gamma-service"
+            scope: "read"
+            cacheTtl: "5m"
+
+    observability:
+      metrics:
+        enabled: true
+        port: 8190
+        path: "/metrics"
+      tracing:
+        enabled: false
+      logging:
+        level: "info"
+        format: "json"
