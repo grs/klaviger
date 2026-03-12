@@ -35,17 +35,32 @@ Start port forwarding to the alpha service:
 ```bash
 kubectl port-forward service/alpha 8080:80
 ```
+and also the dummy oauth service:
+```bash
+kubectl port-forward service/alpha 8888:80
+```
 
 Then in another terminal:
 
 ```bash
-export TOKEN=$(kubectl create token default --duration=1h)
+export TOKEN=$(curl -s "http://localhost:8888/test-token?sub=user@example.com&aud=alpha-service" | jq -r .access_token)
 curl --header "Authorization: Bearer $TOKEN" localhost:8080/beta/gamma/delta
 ```
 
-The response will show that each service in the sequence of calls
-receives a different token, scoped just to that service, with the
-original subject and the actor that requested the new token.
+The response should be something like this:
+
+```
+alpha called with path /beta/gamma/delta, subject user@example.com, audience alpha-service, scopes read
+beta called with path /gamma/delta, subject user@example.com, audience beta-service, scopes read write, actor system:serviceaccount:default:alpha
+gamma called with path /delta, subject user@example.com, audience gamma-service, scopes read write, actor system:serviceaccount:default:beta
+delta called with path /, subject user@example.com, audience delta-service, scopes read write, actor system:serviceaccount:default:gamma
+
+```
+
+This shows that each service in the sequence of calls receives a
+different token, scoped just to that service, with the original
+subject and the actor that requested the new token (which is the
+service account of the service that requested the token excchange).
 
 Note: the dummy oauth service used here doesn't have any restrictions
 on the tokens that can be created as a proper service would. The key

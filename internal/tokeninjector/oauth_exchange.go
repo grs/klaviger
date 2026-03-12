@@ -63,17 +63,17 @@ func NewOAuthInjector(cfg *config.OAuthConfig, serverCfg *config.ServerConfig, l
 		k8sTokenPath: "/var/run/secrets/kubernetes.io/serviceaccount/token",
 	}
 
-	// Check if SPIFFE is enabled for client TLS
-	if serverCfg.ClientTLS.Enabled && serverCfg.ClientTLS.SPIFFE != nil && serverCfg.ClientTLS.SPIFFE.Enabled {
+	// Check if SPIFFE is enabled at server level
+	if serverCfg.SPIFFE != nil && serverCfg.SPIFFE.Enabled {
 		// Use JWT-SVID for authentication
 		logger.Info("Configuring OAuth injector to use JWT-SVID for authentication",
-			zap.String("socketPath", serverCfg.ClientTLS.SPIFFE.SocketPath),
+			zap.String("socketPath", serverCfg.SPIFFE.SocketPath),
 		)
 
 		ctx := context.Background()
 		jwtSource, err := spiffe.NewJWTSource(
 			ctx,
-			serverCfg.ClientTLS.SPIFFE.SocketPath,
+			serverCfg.SPIFFE.SocketPath,
 			[]string{cfg.TokenURL}, // Use token URL as audience
 			logger,
 		)

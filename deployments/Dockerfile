@@ -22,7 +22,7 @@ RUN microdnf install -y ca-certificates && \
 COPY --from=builder /opt/app-root/src/klaviger /usr/local/bin/klaviger
 
 # Copy Kubernetes config example
-COPY --from=builder /opt/app-root/src/examples/config-kubernetes.yaml /etc/klaviger/config.yaml
+COPY --from=builder /opt/app-root/src/examples/configs/kubernetes-auth.yaml /etc/klaviger/config.yaml
 
 # Create non-root user
 RUN useradd -u 1001 -r -g 0 -m -d /home/klaviger -s /sbin/nologin \

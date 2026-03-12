@@ -31,6 +31,7 @@ type ServerConfig struct {
 	WriteTimeout     Duration        `yaml:"writeTimeout"`
 	TLS              TLSConfig       `yaml:"tls"`
 	ClientTLS        ClientTLSConfig `yaml:"clientTls"`
+	SPIFFE           *SPIFFEConfig   `yaml:"spiffe,omitempty"`
 }
 
 // TLSConfig holds TLS configuration
@@ -238,6 +239,9 @@ func setDefaults(cfg *Config) {
 	}
 
 	// SPIFFE defaults
+	if cfg.Server.SPIFFE != nil && cfg.Server.SPIFFE.SocketPath == "" {
+		cfg.Server.SPIFFE.SocketPath = "unix:///run/spire/sockets/agent.sock"
+	}
 	if cfg.Server.TLS.SPIFFE != nil && cfg.Server.TLS.SPIFFE.SocketPath == "" {
 		cfg.Server.TLS.SPIFFE.SocketPath = "unix:///run/spire/sockets/agent.sock"
 	}

@@ -76,6 +76,12 @@ func validateServer(cfg *ServerConfig) error {
 		}
 	}
 
+	if cfg.SPIFFE != nil {
+		if err := validateSPIFFE(cfg.SPIFFE); err != nil {
+			return fmt.Errorf("spiffe: %w", err)
+		}
+	}
+
 	return nil
 }
 

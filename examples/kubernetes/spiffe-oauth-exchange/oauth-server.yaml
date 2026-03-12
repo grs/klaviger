@@ -1,7 +1,21 @@
+# OAuth Server with SPIFFE SVID Support
 ---
-# Mock OAuth Token Exchange Server
-# This is a simple mock server that implements RFC 8693 token exchange
-# for demonstration purposes only - NOT for production use
+apiVersion: v1
+kind: Service
+metadata:
+  name: oauth-server
+  labels:
+    app: oauth-server
+spec:
+  selector:
+    app: oauth-server
+  ports:
+  - name: http
+    port: 80
+    targetPort: 8080
+    protocol: TCP
+  type: ClusterIP
+---
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -12,11 +26,10 @@ data:
   server.py: |
     #!/usr/bin/env python3
     """
-    Mock OAuth 2.0 Token Exchange Server (RFC 8693)
+    Mock OAuth 2.0 Token Exchange Server with SPIFFE Support (RFC 8693)
 
-    This server accepts token exchange requests and returns JWT tokens
-    for demonstration purposes. It validates the incoming service account
-    token and returns a scoped access token.
+    This server accepts token exchange requests with SPIFFE JWT-SVIDs
+    as subject tokens and returns scoped JWT access tokens.
 
     NOT FOR PRODUCTION USE - This is a demo/testing server only.
     """
@@ -26,10 +39,16 @@ data:
     import time
     import hashlib
     import hmac
+    import urllib.request
+    import ssl
     from urllib.parse import parse_qs, urlparse
 
     # Simple symmetric key for signing JWTs (in production, use asymmetric keys)
     JWT_SECRET = "demo-secret-key-do-not-use-in-production"
+
+    # Cache for SPIRE JWKS
+    jwks_cache = {"data": None, "timestamp": 0}
+    JWKS_CACHE_TTL = 300  # 5 minutes
 
     def base64url_encode(data):
         """Base64URL encode without padding"""
@@ -64,9 +83,94 @@ data:
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
                 "level": "warning",
                 "component": "oauth-server",
-                "message": f"Failed to extract sub from subject token: {e}"
+                "message": f"Failed to extract sub from token: {e}"
             }))
             return None
+
+    def get_spire_jwks():
+        """Fetch JWKS from SPIRE server with caching"""
+        global jwks_cache
+
+        now = time.time()
+        if jwks_cache["data"] and (now - jwks_cache["timestamp"]) < JWKS_CACHE_TTL:
+            return jwks_cache["data"]
+
+        try:
+            # SPIRE server JWKS endpoint
+            url = "http://spire-server.spire.svc.cluster.local:8081/keys"
+
+            context = ssl._create_unverified_context()
+            with urllib.request.urlopen(url, context=context, timeout=5) as response:
+                jwks = json.loads(response.read().decode('utf-8'))
+                jwks_cache["data"] = jwks
+                jwks_cache["timestamp"] = now
+
+                print(json.dumps({
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "level": "info",
+                    "component": "oauth-server",
+                    "message": f"Fetched SPIRE JWKS: {len(jwks.get('keys', []))} keys"
+                }))
+                return jwks
+        except Exception as e:
+            print(json.dumps({
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "level": "error",
+                "component": "oauth-server",
+                "message": f"Error fetching SPIRE JWKS: {e}"
+            }))
+            return None
+
+    def verify_spiffe_svid(token):
+        """
+        Verify SPIFFE JWT-SVID
+        In production, use a proper JWT library like PyJWT
+        This is a simplified verification for demo purposes
+        """
+        try:
+            parts = token.split('.')
+            if len(parts) != 3:
+                return False, None, f"Invalid JWT format: expected 3 parts, got {len(parts)}"
+
+            # Decode payload
+            payload_json = base64url_decode(parts[1]).decode('utf-8')
+            payload = json.loads(payload_json)
+
+            print(json.dumps({
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "level": "debug",
+                "component": "oauth-server",
+                "message": "Decoded SPIFFE SVID payload",
+                "payload": payload
+            }))
+
+            # Check expiration
+            exp = payload.get('exp', 0)
+            now = time.time()
+            if exp < now:
+                return False, None, f"SPIFFE SVID expired: exp={exp}, now={now}, diff={now-exp}s"
+
+            # Check it has a SPIFFE ID
+            sub = payload.get('sub', '')
+            if not sub.startswith('spiffe://'):
+                return False, None, f"Invalid SPIFFE ID (must start with spiffe://): {sub}"
+
+            # In production: verify signature using JWKS from SPIRE
+            jwks = get_spire_jwks()
+            if not jwks:
+                print(json.dumps({
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "level": "warning",
+                    "component": "oauth-server",
+                    "message": "Could not fetch SPIRE JWKS for verification, trusting structure"
+                }))
+                # For demo, we'll trust if it has the right structure
+
+            return True, payload, None
+
+        except Exception as e:
+            import traceback
+            return False, None, f"Error verifying SPIFFE SVID: {e}\n{traceback.format_exc()}"
 
     def create_jwt(payload):
         """Create a simple HS256 JWT"""
@@ -113,32 +217,63 @@ data:
                 self.send_json_error(400, "invalid_grant", "Invalid grant_type")
                 return
 
-            # Extract subject token
+            # Validate Authorization header (must contain SPIFFE SVID for authentication)
+            auth_header = self.headers.get('Authorization', '')
+            if not auth_header.startswith('Bearer '):
+                self.send_json_error(401, "invalid_client", "Missing or invalid Authorization header")
+                return
+
+            auth_token = auth_header[7:]  # Remove "Bearer " prefix
+
+            # Log the auth token for debugging
+            print(json.dumps({
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "level": "debug",
+                "component": "oauth-server",
+                "event": "received_auth_token",
+                "token_prefix": auth_token[:50] + "..." if len(auth_token) > 50 else auth_token
+            }))
+
+            # Verify SPIFFE SVID from Authorization header
+            valid, svid_payload, error_msg = verify_spiffe_svid(auth_token)
+            if not valid:
+                print(json.dumps({
+                    "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                    "level": "error",
+                    "component": "oauth-server",
+                    "event": "svid_authentication_failed",
+                    "error": error_msg,
+                    "token_prefix": auth_token[:50] + "..." if len(auth_token) > 50 else auth_token
+                }))
+                self.send_json_error(401, "invalid_client", f"Invalid SPIFFE SVID in Authorization header: {error_msg}")
+                return
+
+            # Extract SPIFFE ID from auth token (for act claim)
+            spiffe_id = svid_payload.get('sub', 'unknown')
+
+            print(json.dumps({
+                "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "level": "info",
+                "component": "oauth-server",
+                "event": "spiffe_authenticated",
+                "spiffe_id": spiffe_id
+            }))
+
+            # Extract subject token (can be any JWT, not required to be SPIFFE)
             subject_token = params.get('subject_token', [''])[0]
             if not subject_token:
                 self.send_json_error(400, "invalid_request", "Missing subject_token")
                 return
 
-            # Validate Authorization header (should contain K8s SA token or JWT-SVID)
-            auth_header = self.headers.get('Authorization', '')
-            if not auth_header.startswith('Bearer '):
-                self.send_json_error(401, "invalid_client", "Missing or invalid authorization")
-                return
-
-            auth_token = auth_header[7:]  # Remove "Bearer " prefix
-
-            # Extract audience and scope
-            audience = params.get('audience', ['default'])[0]
-            scope = params.get('scope', [''])[0]
-
-            # Extract sub claim from subject token
+            # Extract sub claim from subject token (any JWT format)
             subject_sub = extract_sub_from_jwt(subject_token)
             if not subject_sub:
                 # Fallback to a default if extraction fails
                 subject_sub = "unknown-subject"
 
-            # Extract sub claim from auth token (bearer token) for act claim
-            actor_sub = extract_sub_from_jwt(auth_token)
+            # Extract audience and scope
+            audience = params.get('audience', ['default'])[0]
+            scope = params.get('scope', [''])[0]
 
             # Log the exchange request
             print(json.dumps({
@@ -146,10 +281,8 @@ data:
                 "level": "info",
                 "component": "oauth-server",
                 "event": "token_exchange",
-                "subject_token_prefix": subject_token[:20] + "..." if len(subject_token) > 20 else subject_token,
-                "auth_token_prefix": auth_token[:20] + "..." if len(auth_token) > 20 else auth_token,
-                "subject_sub": subject_sub,
-                "actor_sub": actor_sub,
+                "authenticated_as": spiffe_id,
+                "subject_token_sub": subject_sub,
                 "audience": audience,
                 "scope": scope
             }))
@@ -158,7 +291,7 @@ data:
             now = int(time.time())
             token_payload = {
                 "iss": "http://oauth-server",
-                "sub": subject_sub,
+                "sub": subject_sub,  # Use subject from the subject_token
                 "aud": audience,
                 "scope": scope,
                 "iat": now,
@@ -166,11 +299,10 @@ data:
                 "nbf": now
             }
 
-            # Add act claim if actor_sub was successfully extracted (RFC 8693)
-            if actor_sub:
-                token_payload["act"] = {
-                    "sub": actor_sub
-                }
+            # Add act claim with SPIFFE ID (RFC 8693 - who is acting on behalf)
+            token_payload["act"] = {
+                "sub": spiffe_id  # SPIFFE ID of the authenticated caller
+            }
 
             jwt_token = create_jwt(token_payload)
 
@@ -273,29 +405,11 @@ data:
             "timestamp": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
             "level": "info",
             "component": "oauth-server",
-            "message": "Mock OAuth token exchange server starting",
+            "message": "Mock OAuth token exchange server with SPIFFE support starting",
             "port": 8080
         }))
         server.serve_forever()
 ---
-# OAuth Server Service
-apiVersion: v1
-kind: Service
-metadata:
-  name: oauth-server
-  labels:
-    app: oauth-server
-spec:
-  selector:
-    app: oauth-server
-  ports:
-  - name: http
-    port: 80
-    targetPort: 8080
-    protocol: TCP
-  type: ClusterIP
----
-# OAuth Server Deployment
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -315,42 +429,32 @@ spec:
       containers:
       - name: oauth-server
         image: python:3.11-alpine
-        command: ["python3", "/app/server.py"]
         ports:
         - containerPort: 8080
           name: http
           protocol: TCP
+        command:
+        - python3
+        - /app/server.py
         volumeMounts:
-        - name: server-script
+        - name: script
           mountPath: /app
         securityContext:
           runAsNonRoot: true
-          runAsUser: 1000
+          runAsUser: 1001
           allowPrivilegeEscalation: false
           capabilities:
             drop:
             - ALL
         resources:
           requests:
-            memory: "32Mi"
+            memory: "64Mi"
             cpu: "50m"
           limits:
-            memory: "128Mi"
+            memory: "256Mi"
             cpu: "200m"
-        livenessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 5
-          periodSeconds: 10
-        readinessProbe:
-          httpGet:
-            path: /health
-            port: 8080
-          initialDelaySeconds: 3
-          periodSeconds: 5
       volumes:
-      - name: server-script
+      - name: script
         configMap:
           name: oauth-server-script
-          defaultMode: 0755
+          defaultMode: 0555

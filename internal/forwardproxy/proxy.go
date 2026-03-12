@@ -51,10 +51,11 @@ func New(cfg *config.ForwardProxyConfig, serverCfg *config.ServerConfig, logger 
 
 	// Configure client TLS if enabled
 	if serverCfg.ClientTLS.Enabled {
-		if serverCfg.ClientTLS.SPIFFE != nil && serverCfg.ClientTLS.SPIFFE.Enabled {
-			// Use SPIFFE for client TLS
+		// Check if SPIFFE is enabled at server level for client TLS
+		if serverCfg.SPIFFE != nil && serverCfg.SPIFFE.Enabled {
+			// Use SPIFFE X.509 SVID for client TLS
 			ctx := context.Background()
-			src, err := spiffe.NewSource(ctx, serverCfg.ClientTLS.SPIFFE.SocketPath, "client", logger)
+			src, err := spiffe.NewSource(ctx, serverCfg.SPIFFE.SocketPath, "client", logger)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create SPIFFE source for client TLS: %w", err)
 			}
@@ -67,6 +68,10 @@ func New(cfg *config.ForwardProxyConfig, serverCfg *config.ServerConfig, logger 
 				return nil, fmt.Errorf("failed to get client TLS config from SPIFFE: %w", err)
 			}
 			transport.TLSClientConfig = tlsConfig
+
+			logger.Info("Using SPIFFE X.509 SVID for client TLS",
+				zap.String("socketPath", serverCfg.SPIFFE.SocketPath),
+			)
 		} else {
 			// Use file-based client TLS
 			tlsConfig := &tls.Config{
@@ -97,6 +102,11 @@ func New(cfg *config.ForwardProxyConfig, serverCfg *config.ServerConfig, logger 
 			}
 
 			transport.TLSClientConfig = tlsConfig
+
+			logger.Info("Using file-based client TLS",
+				zap.String("certFile", serverCfg.ClientTLS.CertFile),
+				zap.Bool("hasCACert", serverCfg.ClientTLS.CAFile != ""),
+			)
 		}
 	}
 

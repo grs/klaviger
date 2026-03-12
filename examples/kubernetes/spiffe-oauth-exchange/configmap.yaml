@@ -18,6 +18,9 @@ data:
       writeTimeout: "30s"
       tls:
         enabled: false
+      spiffe:
+        enabled: true
+        socketPath: "unix:///run/spire/agent-sockets/spire-agent.sock"
 
     reverseProxy:
       backend: "http://127.0.0.1:8080"
@@ -88,6 +91,9 @@ data:
       writeTimeout: "30s"
       tls:
         enabled: false
+      spiffe:
+        enabled: true
+        socketPath: "unix:///run/spire/agent-sockets/spire-agent.sock"
 
     reverseProxy:
       backend: "http://127.0.0.1:8080"
@@ -158,6 +164,9 @@ data:
       writeTimeout: "30s"
       tls:
         enabled: false
+      spiffe:
+        enabled: true
+        socketPath: "unix:///run/spire/agent-sockets/spire-agent.sock"
 
     reverseProxy:
       backend: "http://127.0.0.1:8080"
@@ -228,6 +237,9 @@ data:
       writeTimeout: "30s"
       tls:
         enabled: false
+      spiffe:
+        enabled: true
+        socketPath: "unix:///run/spire/agent-sockets/spire-agent.sock"
 
     reverseProxy:
       backend: "http://127.0.0.1:8080"
