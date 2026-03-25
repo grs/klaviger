@@ -86,6 +86,8 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/klaviger
+        - name: satoken
+          mountPath: /var/run/secrets/tokens
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
@@ -104,6 +106,13 @@ spec:
       - name: config
         configMap:
           name: klaviger-config-alpha
+      - name: satoken
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: keycloaktoken
+              expirationSeconds: 600
+              audience: http://keycloak/realms/demo
 ---
 # Beta Service
 apiVersion: v1
@@ -192,6 +201,8 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/klaviger
+        - name: satoken
+          mountPath: /var/run/secrets/tokens
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
@@ -210,6 +221,13 @@ spec:
       - name: config
         configMap:
           name: klaviger-config-beta
+      - name: satoken
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: keycloaktoken
+              expirationSeconds: 600
+              audience: http://keycloak/realms/demo
 ---
 # Gamma Service
 apiVersion: v1
@@ -298,6 +316,8 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/klaviger
+        - name: satoken
+          mountPath: /var/run/secrets/tokens
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
@@ -316,6 +336,13 @@ spec:
       - name: config
         configMap:
           name: klaviger-config-gamma
+      - name: satoken
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: keycloaktoken
+              expirationSeconds: 600
+              audience: http://keycloak/realms/demo
 ---
 # Delta Service
 apiVersion: v1
@@ -404,6 +431,8 @@ spec:
         volumeMounts:
         - name: config
           mountPath: /etc/klaviger
+        - name: satoken
+          mountPath: /var/run/secrets/tokens
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
@@ -422,3 +451,10 @@ spec:
       - name: config
         configMap:
           name: klaviger-config-delta
+      - name: satoken
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: keycloaktoken
+              expirationSeconds: 600
+              audience: http://keycloak/realms/demo

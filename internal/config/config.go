@@ -129,10 +129,12 @@ type FileConfig struct {
 
 // OAuthConfig holds OAuth token exchange configuration
 type OAuthConfig struct {
-	TokenURL string   `yaml:"tokenUrl"`
-	Audience string   `yaml:"audience"`
-	Scope    string   `yaml:"scope"`
-	CacheTTL Duration `yaml:"cacheTtl"`
+	TokenURL        string   `yaml:"tokenUrl"`
+	Audience        string   `yaml:"audience"`
+	Scope           string   `yaml:"scope"`
+	CacheTTL        Duration `yaml:"cacheTtl"`
+	ClientTokenPath string   `yaml:"clientTokenPath,omitempty"` // Path to client token for OAuth authentication (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
+	ClientAuthMethod string  `yaml:"clientAuthMethod,omitempty"` // How to present client token: "header" or "assertion" (default: "header")
 }
 
 // VaultConfig holds Vault token injection configuration

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"os"
@@ -20,20 +21,21 @@ import (
 
 // OAuthInjector injects tokens using OAuth token exchange (RFC 8693)
 type OAuthInjector struct {
-	tokenURL   string
-	audience   string
-	scope      string
-	cacheTTL   time.Duration
-	cache      *util.TokenCache
-	httpClient *http.Client
-	logger     *zap.Logger
+	tokenURL         string
+	audience         string
+	scope            string
+	cacheTTL         time.Duration
+	cache            *util.TokenCache
+	httpClient       *http.Client
+	logger           *zap.Logger
+	clientAuthMethod string // "header" or "assertion"
 
 	// SPIFFE JWT-SVID source for authentication (optional)
 	jwtSource *spiffe.JWTSource
 
-	// Kubernetes service account token for authentication (fallback)
-	k8sTokenPath string
-	k8sToken     string
+	// Client token for authentication (fallback when SPIFFE not enabled)
+	k8sTokenPath string // Path to client token file
+	k8sToken     string // Cached client token
 	k8sTokenMu   sync.RWMutex
 	k8sTokenTime time.Time
 }
@@ -50,17 +52,30 @@ type tokenExchangeResponse struct {
 
 // NewOAuthInjector creates a new OAuth injector
 func NewOAuthInjector(cfg *config.OAuthConfig, serverCfg *config.ServerConfig, logger *zap.Logger) (*OAuthInjector, error) {
+	// Set k8s token path from config or use default
+	k8sTokenPath := cfg.ClientTokenPath
+	if k8sTokenPath == "" {
+		k8sTokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	}
+
+	// Set client auth method from config or use default
+	clientAuthMethod := cfg.ClientAuthMethod
+	if clientAuthMethod == "" {
+		clientAuthMethod = "header"
+	}
+
 	injector := &OAuthInjector{
-		tokenURL: cfg.TokenURL,
-		audience: cfg.Audience,
-		scope:    cfg.Scope,
-		cacheTTL: time.Duration(cfg.CacheTTL),
-		cache:    util.NewTokenCache(logger.With(zap.String("component", "oauth_token_cache"))),
+		tokenURL:         cfg.TokenURL,
+		audience:         cfg.Audience,
+		scope:            cfg.Scope,
+		cacheTTL:         time.Duration(cfg.CacheTTL),
+		cache:            util.NewTokenCache(logger.With(zap.String("component", "oauth_token_cache"))),
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		logger:       logger.With(zap.String("component", "oauth_injector")),
-		k8sTokenPath: "/var/run/secrets/kubernetes.io/serviceaccount/token",
+		logger:           logger.With(zap.String("component", "oauth_injector")),
+		k8sTokenPath:     k8sTokenPath,
+		clientAuthMethod: clientAuthMethod,
 	}
 
 	// Check if SPIFFE is enabled at server level
@@ -68,6 +83,7 @@ func NewOAuthInjector(cfg *config.OAuthConfig, serverCfg *config.ServerConfig, l
 		// Use JWT-SVID for authentication
 		logger.Info("Configuring OAuth injector to use JWT-SVID for authentication",
 			zap.String("socketPath", serverCfg.SPIFFE.SocketPath),
+			zap.String("clientAuthMethod", clientAuthMethod),
 		)
 
 		ctx := context.Background()
@@ -82,9 +98,10 @@ func NewOAuthInjector(cfg *config.OAuthConfig, serverCfg *config.ServerConfig, l
 		}
 		injector.jwtSource = jwtSource
 	} else {
-		// Use Kubernetes service account token for authentication
-		logger.Info("Configuring OAuth injector to use Kubernetes service account token for authentication",
-			zap.String("tokenPath", injector.k8sTokenPath),
+		// Use client token file for authentication
+		logger.Info("Configuring OAuth injector to use client token for authentication",
+			zap.String("tokenPath", k8sTokenPath),
+			zap.String("clientAuthMethod", clientAuthMethod),
 		)
 	}
 
@@ -160,11 +177,11 @@ func (i *OAuthInjector) getAuthToken(ctx context.Context) (string, error) {
 		return token, nil
 	}
 
-	// Otherwise, use Kubernetes service account token
+	// Otherwise, use client token from file
 	return i.getK8sToken()
 }
 
-// getK8sToken reads the Kubernetes service account token
+// getK8sToken reads the client authentication token from file
 func (i *OAuthInjector) getK8sToken() (string, error) {
 	// Check if we have a cached token (refresh every 5 minutes)
 	i.k8sTokenMu.RLock()
@@ -178,12 +195,12 @@ func (i *OAuthInjector) getK8sToken() (string, error) {
 	// Read token from file
 	tokenBytes, err := os.ReadFile(i.k8sTokenPath)
 	if err != nil {
-		return "", fmt.Errorf("failed to read Kubernetes service account token: %w", err)
+		return "", fmt.Errorf("failed to read client authentication token from %s: %w", i.k8sTokenPath, err)
 	}
 
 	token := strings.TrimSpace(string(tokenBytes))
 	if token == "" {
-		return "", fmt.Errorf("Kubernetes service account token is empty")
+		return "", fmt.Errorf("client authentication token is empty")
 	}
 
 	// Cache the token
@@ -192,7 +209,7 @@ func (i *OAuthInjector) getK8sToken() (string, error) {
 	i.k8sTokenTime = time.Now()
 	i.k8sTokenMu.Unlock()
 
-	i.logger.Debug("Loaded Kubernetes service account token",
+	i.logger.Debug("Loaded client authentication token",
 		zap.String("tokenPath", i.k8sTokenPath),
 	)
 
@@ -221,14 +238,29 @@ func (i *OAuthInjector) exchangeToken(ctx context.Context, subjectToken string) 
 		data.Set("scope", i.scope)
 	}
 
+	// Add client authentication based on configured method
+	if i.clientAuthMethod == "assertion" {
+		// Use client_assertion in request body
+		data.Set("client_assertion", authToken)
+
+		// Set client_assertion_type based on whether SPIFFE is enabled
+		if i.jwtSource != nil {
+			data.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-spiffe")
+		} else {
+			data.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
+		}
+	}
+
 	// Create request
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", i.tokenURL, strings.NewReader(data.Encode()))
 	if err != nil {
 		return "", 0, fmt.Errorf("failed to create request: %w", err)
 	}
 
-	// Use bearer token authentication instead of basic auth
-	httpReq.Header.Set("Authorization", "Bearer "+authToken)
+	// Set Authorization header if using header-based authentication
+	if i.clientAuthMethod == "header" {
+		httpReq.Header.Set("Authorization", "Bearer "+authToken)
+	}
 	httpReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
 	// Send request
@@ -240,7 +272,47 @@ func (i *OAuthInjector) exchangeToken(ctx context.Context, subjectToken string) 
 
 	// Check response status
 	if resp.StatusCode != http.StatusOK {
-		return "", 0, fmt.Errorf("exchange endpoint returned status %d", resp.StatusCode)
+		// Read response body for error details
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			i.logger.Error("exchange endpoint returned error, failed to read response body",
+				zap.Int("status", resp.StatusCode),
+				zap.Error(err),
+			)
+			return "", 0, fmt.Errorf("exchange endpoint returned status %d", resp.StatusCode)
+		}
+
+		// Try to parse as OAuth error response
+		var oauthErr struct {
+			Error            string `json:"error"`
+			ErrorDescription string `json:"error_description"`
+			ErrorURI         string `json:"error_uri,omitempty"`
+		}
+
+		bodyStr := string(bodyBytes)
+		if json.Unmarshal(bodyBytes, &oauthErr) == nil && oauthErr.Error != "" {
+			// Successfully parsed OAuth error response
+			i.logger.Error("token exchange failed with OAuth error",
+				zap.Int("status", resp.StatusCode),
+				zap.String("error", oauthErr.Error),
+				zap.String("error_description", oauthErr.ErrorDescription),
+				zap.String("error_uri", oauthErr.ErrorURI),
+			)
+			if oauthErr.ErrorDescription != "" {
+				return "", 0, fmt.Errorf("exchange endpoint returned status %d: %s - %s",
+					resp.StatusCode, oauthErr.Error, oauthErr.ErrorDescription)
+			}
+			return "", 0, fmt.Errorf("exchange endpoint returned status %d: %s",
+				resp.StatusCode, oauthErr.Error)
+		}
+
+		// Not a standard OAuth error, log raw response
+		i.logger.Error("token exchange failed",
+			zap.Int("status", resp.StatusCode),
+			zap.String("response_body", bodyStr),
+		)
+		return "", 0, fmt.Errorf("exchange endpoint returned status %d: %s",
+			resp.StatusCode, bodyStr)
 	}
 
 	// Parse response

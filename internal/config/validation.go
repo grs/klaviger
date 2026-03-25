@@ -396,6 +396,13 @@ func validateOAuth(context string, cfg *OAuthConfig) error {
 		return fmt.Errorf("%s: oauth.cacheTtl must be positive", context)
 	}
 
+	// Validate client auth method if specified
+	if cfg.ClientAuthMethod != "" {
+		if cfg.ClientAuthMethod != "header" && cfg.ClientAuthMethod != "assertion" {
+			return fmt.Errorf("%s: oauth.clientAuthMethod must be 'header' or 'assertion' (got: %s)", context, cfg.ClientAuthMethod)
+		}
+	}
+
 	return nil
 }
 
