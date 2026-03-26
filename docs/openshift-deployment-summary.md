@@ -81,6 +81,28 @@ Provider pointing to our SPIRE OIDC discovery provider, and registered
 the client with `federated-jwt`. The `clientAuthMethod: "assertion"`
 config works as designed — JWT-SVID sent as `client_assertion`.
 
+## Agent card flow with Klaviger
+
+A2A agents serve their own unsigned card from memory at
+`/.well-known/agent-card.json`. With Klaviger, the signed card flow
+works as follows:
+
+1. **Unsigned card** is defined in a ConfigMap (`agentcard-configmap.yaml`)
+   with the agent's name, description, URL, and capabilities
+1. **`sign-agentcard` init container** reads the ConfigMap, signs it
+   with the pod's SPIFFE X.509 identity, writes the signed card to a
+   shared `emptyDir` volume
+1. **Klaviger** mounts the same volume at `/app/.well-known/` and serves
+   it directly for `/.well-known/` requests — bypassing the agent's
+   built-in unsigned card
+1. **Kagenti operator** fetches the card via the Service, verifies the
+   JWS signature against the SPIRE trust bundle, and syncs it to the
+   AgentCard CR
+
+To update the card (name, description, capabilities), edit the
+ConfigMap and restart the pod. The `kagenti.io/description` annotation
+on the Deployment is separate metadata and still works independently.
+
 ## OpenShift-specific findings
 
 1. **SCC:** Created a minimal `klaviger-sidecar` SCC (CSI volumes +
