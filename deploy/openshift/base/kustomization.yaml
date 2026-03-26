@@ -14,4 +14,4 @@ resources:
 
 images:
 - name: ghcr.io/pavelanni/klaviger
-  newTag: alpine-test
+  newTag: 87fa49b-dirty
