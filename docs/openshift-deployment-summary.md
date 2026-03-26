@@ -32,23 +32,26 @@ stripped static binary with `-ldflags='-s -w'`.
 
 - Klaviger connects to SPIRE via CSI driver, obtains JWT-SVIDs
 - Reverse proxy (8180) and forward proxy (8181) running
-- Agent card signed by SPIFFE identity, served via `/.well-known/`
-  without auth
-- Kagenti operator discovers the agent
+- Agent card signed by SPIFFE identity, verified by Kagenti operator
+- Kagenti operator discovers the agent (AgentCard CR: verified, bound,
+  synced)
+- Inbound JWT verification against Keycloak JWKS
 - Keycloak `federated-jwt` with SPIFFE IdP — no client secrets
 
 **What's pending:**
 
-- End-to-end token exchange test (Keycloak config in progress)
-- Agent card signature verification (operator trust config issue)
+- End-to-end outbound token exchange test
 
 ## Code changes
 
 Branch: `feature/openshift-deployment`
 
-1. **`internal/reverseproxy/proxy.go`** — added `/.well-known/` path
-   exclusion from JWT verification (agent card discovery needs to be
-   unauthenticated)
+1. **`internal/reverseproxy/proxy.go`** — serve `/.well-known/` from a
+   local directory (signed agent card) if available, otherwise proxy to
+   backend. This is needed because the Python agent serves its own
+   unsigned card from memory, ignoring the signed file on disk. With
+   AuthBridge, Envoy's iptables intercept handled this; with Klaviger,
+   we serve the signed card directly from the shared volume.
 
 1. **`internal/tokeninjector/oauth_exchange.go`** — added
    `client_secret` auth method as fallback for Keycloak instances
@@ -95,6 +98,5 @@ config works as designed — JWT-SVID sent as `client_assertion`.
 
 ## What's next
 
-1. End-to-end token exchange and agent-to-agent communication test
-1. Resolve agent card signature verification with operator team
+1. End-to-end outbound token exchange test
 1. Onboard additional agents
