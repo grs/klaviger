@@ -14,4 +14,4 @@ resources:
 
 images:
 - name: ghcr.io/pavelanni/klaviger
-  newTag: c4c11cf
+  newTag: bd038ae-dirty
