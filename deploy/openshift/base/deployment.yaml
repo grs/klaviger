@@ -125,17 +125,6 @@ spec:
         args:
         - "--config"
         - "/etc/klaviger/config.yaml"
-        env:
-        - name: OAUTH_CLIENT_ID
-          valueFrom:
-            secretKeyRef:
-              name: klaviger-client-secret
-              key: client-id
-        - name: OAUTH_CLIENT_SECRET
-          valueFrom:
-            secretKeyRef:
-              name: klaviger-client-secret
-              key: client-secret
         securityContext:
           runAsNonRoot: true
           runAsUser: 1001
