@@ -7,21 +7,70 @@ metadata:
     app.kubernetes.io/component: agent
     kagenti.io/type: agent
     kagenti.io/framework: Python
+    kagenti.io/inject: disabled
+    kagenti.io/spire: enabled
+    kagenti.io/workload-type: deployment
+    protocol.kagenti.io/a2a: ""
+  annotations:
+    kagenti.io/description: "Tech document summarizer (Klaviger sidecar)"
 spec:
   replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: summarizer-tech-klaviger
-      kagenti.io/type: agent
   template:
     metadata:
       labels:
         app.kubernetes.io/name: summarizer-tech-klaviger
         app.kubernetes.io/component: agent
-        kagenti.io/type: agent
         kagenti.io/framework: Python
+        kagenti.io/workload-type: deployment
+        protocol.kagenti.io/a2a: ""
     spec:
       serviceAccountName: summarizer-tech-klaviger
+      initContainers:
+      # --- Sign agent card using SPIFFE identity ---
+      - name: sign-agentcard
+        image: ghcr.io/pavelanni/agentcard-signer:latest
+        imagePullPolicy: Always
+        env:
+        - name: SPIFFE_ENDPOINT_SOCKET
+          value: "unix:///run/spire/agent-sockets/spire-agent.sock"
+        - name: UNSIGNED_CARD_PATH
+          value: "/etc/agentcard/agent.json"
+        - name: AGENT_CARD_PATH
+          value: "/app/.well-known/agent-card.json"
+        - name: SIGN_TIMEOUT
+          value: "30s"
+        - name: AGENT_NAME
+          value: "summarizer-tech-klaviger"
+        - name: POD_NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        securityContext:
+          runAsNonRoot: true
+          allowPrivilegeEscalation: false
+          readOnlyRootFilesystem: true
+          capabilities:
+            drop:
+            - ALL
+        resources:
+          requests:
+            cpu: 10m
+            memory: 32Mi
+          limits:
+            cpu: 100m
+            memory: 64Mi
+        volumeMounts:
+        - name: spire-agent-socket
+          mountPath: /run/spire/agent-sockets
+          readOnly: true
+        - name: unsigned-card
+          mountPath: /etc/agentcard
+          readOnly: true
+        - name: signed-card
+          mountPath: /app/.well-known
       containers:
       # --- Agent container (same image as existing summarizer-tech) ---
       - name: agent
@@ -56,6 +105,9 @@ spec:
         volumeMounts:
         - name: cache
           mountPath: /app/.cache
+        - name: signed-card
+          mountPath: /app/.well-known
+          readOnly: true
       # --- Klaviger sidecar ---
       - name: klaviger
         image: ghcr.io/pavelanni/klaviger:latest
@@ -101,3 +153,10 @@ spec:
         csi:
           driver: csi.spiffe.io
           readOnly: true
+      - name: unsigned-card
+        configMap:
+          name: summarizer-tech-klaviger-card-unsigned
+      - name: signed-card
+        emptyDir:
+          medium: Memory
+          sizeLimit: 1Mi

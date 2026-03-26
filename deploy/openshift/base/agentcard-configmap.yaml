@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: summarizer-tech-klaviger-card-unsigned
+  labels:
+    app.kubernetes.io/name: summarizer-tech-klaviger
+data:
+  agent.json: |
+    {
+      "name": "summarizer-tech-klaviger",
+      "description": "Tech document summarizer (Klaviger sidecar)",
+      "url": "http://summarizer-tech-klaviger.spiffe-demo.svc.cluster.local:8080",
+      "version": "1.0.0",
+      "capabilities": {
+        "streaming": false,
+        "pushNotifications": false
+      },
+      "defaultInputModes": ["text/plain"],
+      "defaultOutputModes": ["text/plain"],
+      "skills": []
+    }

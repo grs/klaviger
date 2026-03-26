@@ -76,6 +76,9 @@ func (p *Proxy) Handler() http.Handler {
 	// Health endpoints (no auth required)
 	mux.Handle("/health/", server.HealthHandler())
 
+	// Well-known endpoints (no auth required, proxied to backend)
+	mux.Handle("/.well-known/", proxyWithoutAuth(p, p.logger))
+
 	// Proxy handler with metrics, authentication, and tracing
 	proxyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Start tracing span
@@ -125,6 +128,17 @@ func (p *Proxy) Handler() http.Handler {
 	mux.Handle("/", authHandler)
 
 	return mux
+}
+
+// proxyWithoutAuth returns a handler that proxies requests without authentication
+func proxyWithoutAuth(p *Proxy, logger *zap.Logger) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		logger.Debug("unauthenticated proxy request",
+			zap.String("path", r.URL.Path),
+			zap.String("method", r.Method),
+		)
+		p.proxy.ServeHTTP(w, r)
+	})
 }
 
 // responseWriter wraps http.ResponseWriter to capture status code

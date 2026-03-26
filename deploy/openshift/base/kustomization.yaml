@@ -8,6 +8,7 @@ resources:
 - scc.yaml
 - scc-rolebinding.yaml
 - configmap.yaml
+- agentcard-configmap.yaml
 - deployment.yaml
 - service.yaml
 
