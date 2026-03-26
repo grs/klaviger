@@ -19,14 +19,14 @@ data:
         enabled: true
         socketPath: "unix:///spiffe-workload-api/spire-agent.sock"
         jwtAudience:
-          - "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo"
+          - "http://keycloak.spiffe-demo.svc.cluster.local:8080/realms/spiffe-demo"
 
     reverseProxy:
       backend: "http://127.0.0.1:8000"
       verification:
         mode: "jwt"
         jwt:
-          jwksUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/certs"
+          jwksUrl: "http://keycloak.spiffe-demo.svc.cluster.local:8080/realms/spiffe-demo/protocol/openid-connect/certs"
           issuer: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo"
           audience: "summarizer-tech-klaviger"
           cacheTtl: "5m"
@@ -39,7 +39,7 @@ data:
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/token"
+            tokenUrl: "http://keycloak.spiffe-demo.svc.cluster.local:8080/realms/spiffe-demo/protocol/openid-connect/token"
             audience: "summarizer-service-aud"
             cacheTtl: "5m"
             clientAuthMethod: "assertion"
@@ -47,7 +47,7 @@ data:
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/token"
+            tokenUrl: "http://keycloak.spiffe-demo.svc.cluster.local:8080/realms/spiffe-demo/protocol/openid-connect/token"
             audience: "reviewer-service-aud"
             cacheTtl: "5m"
             clientAuthMethod: "assertion"
