@@ -134,8 +134,10 @@ type OAuthConfig struct {
 	Scope            string   `yaml:"scope"`
 	CacheTTL         Duration `yaml:"cacheTtl"`
 	ClientTokenPath  string   `yaml:"clientTokenPath,omitempty"`  // Path to client token for OAuth authentication (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
-	ClientAuthMethod string   `yaml:"clientAuthMethod,omitempty"` // How to present client token: "header" or "assertion" (default: "header")
+	ClientAuthMethod  string   `yaml:"clientAuthMethod,omitempty"`  // How to present client token: "header", "assertion", or "client_secret" (default: "header")
 	IncludeActorToken *bool   `yaml:"includeActorToken,omitempty"` // Send authentication token as actor_token in request body per RFC 8693 (default: true)
+	ClientID          string  `yaml:"clientId,omitempty"`          // Client ID for client_secret auth method
+	ClientSecret      string  `yaml:"clientSecret,omitempty"`      // Client secret for client_secret auth method
 }
 
 // VaultConfig holds Vault token injection configuration
@@ -347,6 +349,11 @@ func (cfg *Config) Sanitize() *Config {
 			vault := *sanitized.ForwardProxy.HostRules[i].Mode.Vault
 			vault.Token = redactSecret(vault.Token)
 			sanitized.ForwardProxy.HostRules[i].Mode.Vault = &vault
+		}
+		if sanitized.ForwardProxy.HostRules[i].Mode.OAuth != nil {
+			oauth := *sanitized.ForwardProxy.HostRules[i].Mode.OAuth
+			oauth.ClientSecret = redactSecret(oauth.ClientSecret)
+			sanitized.ForwardProxy.HostRules[i].Mode.OAuth = &oauth
 		}
 	}
 
