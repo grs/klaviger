@@ -10,6 +10,24 @@ comparison.
 **Pod structure:** 2 containers + 1 init (down from 4 + 2 init with
 AuthBridge). No iptables, no privileged SCC, no runtime secrets.
 
+### Resource usage (measured on OpenShift)
+
+Both deployments run the same `kagenti-summarizer` agent image.
+Only the sidecar differs.
+
+| Metric | AuthBridge | Klaviger (Alpine) | Reduction |
+| ------ | ---------- | ----------------- | --------- |
+| CPU | 203m | 3m | 98% |
+| Memory | 164Mi | 77Mi | 53% |
+| Image size | ~200MB (4 images) | 60MB | 70% |
+| Containers | 4 + 2 init | 2 + 1 init | |
+| Runtime secrets | yes | none | |
+
+We also built a UBI-based image (200MB, 86Mi memory) for environments
+that require Red Hat certified base images. The Alpine image
+(`Dockerfile.alpine`) is the default since it produces a smaller,
+stripped static binary with `-ldflags='-s -w'`.
+
 **What works:**
 
 - Klaviger connects to SPIRE via CSI driver, obtains JWT-SVIDs
@@ -38,6 +56,9 @@ Branch: `feature/openshift-deployment`
 
 1. **`internal/config/config.go`** — added `ClientID`/`ClientSecret`
    fields to `OAuthConfig`
+
+1. **`deployments/Dockerfile.alpine`** — Alpine-based image (60MB vs
+   200MB UBI), static binary with stripped symbols
 
 1. **`Makefile`** — added `podman-build`, `podman-push`,
    `deploy-openshift` targets with git SHA-based image tagging
@@ -68,8 +89,9 @@ config works as designed — JWT-SVID sent as `client_assertion`.
    labels to prevent AuthBridge injection while keeping
    `kagenti.io/type: agent` for operator discovery.
 
-1. **Dockerfile:** Already OpenShift-compatible (UBI base, UID 1001,
-   group 0).
+1. **Dockerfile:** Two variants — `Dockerfile` (UBI, OpenShift
+   certified) and `Dockerfile.alpine` (Alpine, 70% smaller). Both
+   use UID 1001 and group 0 for OpenShift compatibility.
 
 ## What's next
 
