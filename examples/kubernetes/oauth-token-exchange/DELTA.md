@@ -61,6 +61,8 @@ The OAuth example adds ConfigMap volume mounting to the Klaviger sidecar:
 +    volumeMounts:
 +    - name: config
 +      mountPath: /etc/klaviger
++    - name: satoken
++      mountPath: /var/run/secrets/tokens
      securityContext:
        runAsNonRoot: true
        # ...
@@ -68,9 +70,26 @@ The OAuth example adds ConfigMap volume mounting to the Klaviger sidecar:
 +  - name: config
 +    configMap:
 +      name: klaviger-config-alpha
++  - name: satoken
++    projected:
++      sources:
++      - serviceAccountToken:
++          path: keycloaktoken
++          expirationSeconds: 600
++          audience: http://keycloak/realms/demo
 ```
 
 Each service has a different ConfigMap (alpha, beta, gamma, delta) with service-specific OAuth routing rules
+
+### Projected Volume Token
+
+The `satoken` volume uses Kubernetes' [projected volume](https://kubernetes.io/docs/concepts/storage/projected-volumes/) feature to inject a service account token with a specific audience:
+
+- **path**: `keycloaktoken` - token file name (full path: `/var/run/secrets/tokens/keycloaktoken`)
+- **audience**: `http://keycloak/realms/demo` - must match the Keycloak realm issuer URL
+- **expirationSeconds**: `600` - token expires after 10 minutes (automatically refreshed by kubelet)
+
+This token is used by Klaviger for client authentication when performing OAuth token exchanges with Keycloak
 
 ---
 

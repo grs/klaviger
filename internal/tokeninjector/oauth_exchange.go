@@ -31,7 +31,8 @@ type OAuthInjector struct {
 	clientAuthMethod string // "header" or "assertion"
 
 	// SPIFFE JWT-SVID source for authentication (optional)
-	jwtSource *spiffe.JWTSource
+	jwtSource    *spiffe.JWTSource
+	jwtAudience  []string // Audience for JWT-SVID requests
 
 	// Client token for authentication (fallback when SPIFFE not enabled)
 	k8sTokenPath string // Path to client token file
@@ -80,23 +81,32 @@ func NewOAuthInjector(cfg *config.OAuthConfig, serverCfg *config.ServerConfig, l
 
 	// Check if SPIFFE is enabled at server level
 	if serverCfg.SPIFFE != nil && serverCfg.SPIFFE.Enabled {
+		// Determine JWT-SVID audience
+		jwtAudience := serverCfg.SPIFFE.JWTAudience
+		if len(jwtAudience) == 0 {
+			// Fall back to token URL if no JWT audience configured
+			jwtAudience = []string{cfg.TokenURL}
+		}
+
 		// Use JWT-SVID for authentication
 		logger.Info("Configuring OAuth injector to use JWT-SVID for authentication",
 			zap.String("socketPath", serverCfg.SPIFFE.SocketPath),
 			zap.String("clientAuthMethod", clientAuthMethod),
+			zap.Strings("jwtAudience", jwtAudience),
 		)
 
 		ctx := context.Background()
 		jwtSource, err := spiffe.NewJWTSource(
 			ctx,
 			serverCfg.SPIFFE.SocketPath,
-			[]string{cfg.TokenURL}, // Use token URL as audience
+			jwtAudience,
 			logger,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create JWT-SVID source for OAuth authentication: %w", err)
 		}
 		injector.jwtSource = jwtSource
+		injector.jwtAudience = jwtAudience
 	} else {
 		// Use client token file for authentication
 		logger.Info("Configuring OAuth injector to use client token for authentication",
@@ -170,7 +180,7 @@ func (i *OAuthInjector) Inject(ctx context.Context, req *http.Request) error {
 func (i *OAuthInjector) getAuthToken(ctx context.Context) (string, error) {
 	// If SPIFFE JWT-SVID source is configured, use it
 	if i.jwtSource != nil {
-		token, err := i.jwtSource.FetchJWTSVID(ctx, []string{i.tokenURL})
+		token, err := i.jwtSource.FetchJWTSVID(ctx, i.jwtAudience)
 		if err != nil {
 			return "", fmt.Errorf("failed to fetch JWT-SVID for OAuth authentication: %w", err)
 		}

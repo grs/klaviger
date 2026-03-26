@@ -21,15 +21,17 @@ data:
       spiffe:
         enabled: true
         socketPath: "unix:///run/spire/agent-sockets/spire-agent.sock"
+        jwtAudience:
+          - "http://keycloak/realms/demo"
 
     reverseProxy:
       backend: "http://127.0.0.1:8080"
       verification:
         mode: "jwt"
         jwt:
-          jwksUrl: "http://oauth-server/.well-known/jwks.json"
-          issuer: "http://oauth-server"
-          audience: "alpha-service"
+          jwksUrl: "http://keycloak/realms/demo/protocol/openid-connect/certs"
+          issuer: "http://keycloak/realms/demo"
+          audience: "alpha"
           cacheTtl: "5m"
 
     forwardProxy:
@@ -40,26 +42,26 @@ data:
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "beta-service"
-            scope: "read write"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "beta"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
       - hostPattern: "^gamma(:|$)"
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "gamma-service"
-            scope: "read"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "gamma"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
       - hostPattern: "^delta(:|$)"
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "delta-service"
-            scope: "write"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "delta"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
 
     observability:
       metrics:
@@ -94,15 +96,17 @@ data:
       spiffe:
         enabled: true
         socketPath: "unix:///run/spire/agent-sockets/spire-agent.sock"
+        jwtAudience:
+          - "http://keycloak/realms/demo"
 
     reverseProxy:
       backend: "http://127.0.0.1:8080"
       verification:
         mode: "jwt"
         jwt:
-          jwksUrl: "http://oauth-server/.well-known/jwks.json"
-          issuer: "http://oauth-server"
-          audience: "beta-service"
+          jwksUrl: "http://keycloak/realms/demo/protocol/openid-connect/certs"
+          issuer: "http://keycloak/realms/demo"
+          audience: "beta"
           cacheTtl: "5m"
 
     forwardProxy:
@@ -113,26 +117,26 @@ data:
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "alpha-service"
-            scope: "read"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "alpha"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
       - hostPattern: "^gamma(:|$)"
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "gamma-service"
-            scope: "read write"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "gamma"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
       - hostPattern: "^delta(:|$)"
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "delta-service"
-            scope: "read"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "delta"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
 
     observability:
       metrics:
@@ -167,15 +171,17 @@ data:
       spiffe:
         enabled: true
         socketPath: "unix:///run/spire/agent-sockets/spire-agent.sock"
+        jwtAudience:
+          - "http://keycloak/realms/demo"
 
     reverseProxy:
       backend: "http://127.0.0.1:8080"
       verification:
         mode: "jwt"
         jwt:
-          jwksUrl: "http://oauth-server/.well-known/jwks.json"
-          issuer: "http://oauth-server"
-          audience: "gamma-service"
+          jwksUrl: "http://keycloak/realms/demo/protocol/openid-connect/certs"
+          issuer: "http://keycloak/realms/demo"
+          audience: "gamma"
           cacheTtl: "5m"
 
     forwardProxy:
@@ -186,26 +192,26 @@ data:
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "alpha-service"
-            scope: "write"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "alpha"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
       - hostPattern: "^beta(:|$)"
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "beta-service"
-            scope: "read"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "beta"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
       - hostPattern: "^delta(:|$)"
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "delta-service"
-            scope: "read write"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "delta"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
 
     observability:
       metrics:
@@ -240,15 +246,17 @@ data:
       spiffe:
         enabled: true
         socketPath: "unix:///run/spire/agent-sockets/spire-agent.sock"
+        jwtAudience:
+          - "http://keycloak/realms/demo"
 
     reverseProxy:
       backend: "http://127.0.0.1:8080"
       verification:
         mode: "jwt"
         jwt:
-          jwksUrl: "http://oauth-server/.well-known/jwks.json"
-          issuer: "http://oauth-server"
-          audience: "delta-service"
+          jwksUrl: "http://keycloak/realms/demo/protocol/openid-connect/certs"
+          issuer: "http://keycloak/realms/demo"
+          audience: "delta"
           cacheTtl: "5m"
 
     forwardProxy:
@@ -259,26 +267,26 @@ data:
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "alpha-service"
-            scope: "read write"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "alpha"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
       - hostPattern: "^beta(:|$)"
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "beta-service"
-            scope: "write"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "beta"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
       - hostPattern: "^gamma(:|$)"
         mode:
           type: "oauth"
           oauth:
-            tokenUrl: "http://oauth-server/token"
-            audience: "gamma-service"
-            scope: "read"
+            tokenUrl: "http://keycloak/realms/demo/protocol/openid-connect/token"
+            audience: "gamma"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
 
     observability:
       metrics:

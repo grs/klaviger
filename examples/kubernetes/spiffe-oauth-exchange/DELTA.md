@@ -48,4 +48,6 @@ The SPIRE server and agent must be installed on the cluster.
 +     spiffe:
 +       enabled: true
 +       socketPath: "unix:///run/spire/agent-sockets/spire-agent.sock"
++       jwtAudience:
++         - "http://keycloak/realms/demo"
 ```
