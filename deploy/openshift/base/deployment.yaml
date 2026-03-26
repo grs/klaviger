@@ -34,7 +34,7 @@ spec:
       initContainers:
       # --- Sign agent card using SPIFFE identity ---
       - name: sign-agentcard
-        image: ghcr.io/pavelanni/agentcard-signer:latest
+        image: ttl.sh/kcogan-agentcard-signer:24h
         imagePullPolicy: Always
         env:
         - name: SPIFFE_ENDPOINT_SOCKET
@@ -145,6 +145,9 @@ spec:
           readOnly: true
         - name: spire-agent-socket
           mountPath: /spiffe-workload-api
+          readOnly: true
+        - name: signed-card
+          mountPath: /app/.well-known
           readOnly: true
       volumes:
       - name: cache

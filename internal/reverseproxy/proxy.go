@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"os"
 	"time"
 
 	"github.com/grs/klaviger/internal/auth"
@@ -76,8 +77,16 @@ func (p *Proxy) Handler() http.Handler {
 	// Health endpoints (no auth required)
 	mux.Handle("/health/", server.HealthHandler())
 
-	// Well-known endpoints (no auth required, proxied to backend)
-	mux.Handle("/.well-known/", proxyWithoutAuth(p, p.logger))
+	// Well-known endpoints (no auth required)
+	// Serve from local directory if available, otherwise proxy to backend
+	wellKnownDir := "/app/.well-known"
+	if info, err := os.Stat(wellKnownDir); err == nil && info.IsDir() {
+		p.logger.Info("serving .well-known from local directory", zap.String("dir", wellKnownDir))
+		mux.Handle("/.well-known/", http.StripPrefix("/.well-known/", http.FileServer(http.Dir(wellKnownDir))))
+	} else {
+		p.logger.Info("serving .well-known via proxy to backend")
+		mux.Handle("/.well-known/", proxyWithoutAuth(p, p.logger))
+	}
 
 	// Proxy handler with metrics, authentication, and tracing
 	proxyHandler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
