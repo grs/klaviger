@@ -9,9 +9,9 @@ Klaviger container can replace the four-container AuthBridge pattern.
 
 - **Cluster:** OpenShift (apps.ocp-beta-test.nerc.mghpcc.org)
 - **Namespace:** `spiffe-demo`
-- **SPIRE:** deployed with CSI driver, trust domain `demo.example.com`
-- **Keycloak:** external route at
-  `keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org`
+- **SPIRE:** deployed with CSI driver, trust domain
+  `apps.ocp-beta-test.nerc.mghpcc.org`
+- **Keycloak:** v26.5.6 with `--features=token-exchange,spiffe`
 - **Branch:** `feature/openshift-deployment`
 
 ## What was deployed
@@ -30,7 +30,8 @@ agent image (`kagenti-summarizer`), allowing direct comparison.
 | SCC required | `kagenti-authbridge` (privileged, NET_ADMIN) | `klaviger-sidecar` (minimal, no privileges) |
 | Traffic interception | iptables redirect (transparent) | `HTTP_PROXY` env var (explicit) |
 | SPIFFE integration | spiffe-helper writes token to file | direct Workload API via CSI |
-| Keycloak auth | client-registration + client credentials | JWT-SVID as bearer token |
+| Keycloak auth | client-registration + client credentials | `federated-jwt` via SPIFFE IdP |
+| Runtime secrets | admin creds in ConfigMap + client secret | none |
 | ConfigMaps/Secrets | 5+ | 2 (klaviger config + unsigned agent card) |
 
 ### Manifest files
@@ -61,34 +62,16 @@ not allowed.
 `oc adm policy add-scc-to-user` to bind it (the ClusterRole is
 auto-created by this command, not by SCC creation alone).
 
-### GHCR image visibility
-
-**Problem:** The pushed image was private by default, causing
-`ImagePullBackOff`.
-
-**Solution:** Made the GHCR package public.
-
 ### Kagenti AuthBridge webhook injection
 
 **Problem:** The Kagenti AuthBridge mutating webhook injected
 proxy-init, envoy-proxy, spiffe-helper, and client-registration into
 the pod — defeating the purpose of using Klaviger instead.
 
-The webhook matches all pods in namespaces with `kagenti-enabled: true`
-(which `spiffe-demo` has). It checks `kagenti.io/type: agent` on pod
-labels to decide if a pod is eligible for injection.
-
 **Solution:** Set `kagenti.io/inject: disabled` on pod template labels.
-The webhook code in `pod_mutator.go` (line 122-127) checks for this
-value and skips injection. The `kagenti.io/type: agent` label must
-remain on the pod template so the Kagenti operator can discover the
-agent and manage its AgentCard.
-
-**Key code path** (from kagenti-webhook source):
-
-1. Check `kagenti.io/type` — must be `agent` or `tool`, otherwise skip
-1. Check `kagenti.io/inject` — if `disabled`, skip injection
-1. Evaluate per-sidecar precedence chain
+The webhook checks this value and skips injection. The
+`kagenti.io/type: agent` label must remain on the pod template so the
+Kagenti operator can discover the agent.
 
 ### Agent card endpoint blocked by JWT verification
 
@@ -104,81 +87,63 @@ pattern already used for `/health/` endpoints.
 ### Agent card signature verification
 
 **Problem:** The Kagenti operator discovers the agent, creates an
-AgentCard CR, and fetches the card successfully. The card is signed by
-the `sign-agentcard` init container using the pod's SPIFFE identity.
-However, the operator fails signature verification with:
-
-```text
-No signature verified via x5c chain validation
-```
-
-The SPIFFE ID in the signing certificate is
-`spiffe://...sa/summarizer-tech-klaviger` (based on the ServiceAccount
-name). The operator's x5c chain validation does not trust this identity.
+AgentCard CR, and fetches the card successfully. However, signature
+verification fails with `No signature verified via x5c chain
+validation`.
 
 **Status:** Open. This is an operator/SPIRE trust configuration issue,
-not a Klaviger issue. The operator needs to be configured to trust the
-SPIFFE identity of the new ServiceAccount, or the SPIRE trust bundle
-configuration needs to include it. The existing agents work because
-their SPIFFE identities are already trusted.
-
-**Operator log evidence:**
-
-```text
-Fetching A2A agent card  url=http://summarizer-tech-klaviger...8080/.well-known/agent-card.json
-Signature verification failed  reason=SignatureInvalid  details=No signature verified via x5c chain validation
-Identity binding is allowlist-only; SPIFFE trust bundle verification not yet available
-```
-
-The message "Identity binding is allowlist-only" suggests the operator
-maintains an explicit allowlist of trusted identities rather than
-trusting the full SPIRE trust bundle.
+not a Klaviger issue.
 
 ## Keycloak integration
 
-### Upstream intent: `federated-jwt` (Keycloak nightly)
+### SPIFFE preview feature
 
-The Klaviger author's upstream SPIFFE example uses Keycloak's
-**SPIFFE Identity Provider** (`providerId=spiffe`) with
-`clientAuthenticatorType=federated-jwt`. This allows Keycloak to
-validate JWT-SVIDs against the SPIRE trust bundle directly — no client
-secrets needed at runtime. Clients are pre-registered once, bound to a
-specific SPIFFE ID:
+The SPIFFE identity provider is available in Keycloak 26.5+ as a
+preview feature. Enable it with `--features=spiffe` on the Keycloak
+startup command. No nightly build required.
+
+### How it works
+
+1. A **SPIFFE Identity Provider** is configured in the realm, pointing
+   to the SPIRE OIDC discovery provider's bundle endpoint
+1. Clients are registered with `clientAuthenticatorType=federated-jwt`,
+   bound to a specific SPIFFE ID via `jwt.credential.sub`
+1. Klaviger uses `clientAuthMethod: "assertion"` — sends the JWT-SVID
+   as a `client_assertion` in token exchange requests
+1. Keycloak validates the JWT-SVID against the SPIRE trust bundle
+
+**No secrets are stored or distributed at runtime.** The SPIFFE identity
+is the credential.
+
+### Keycloak setup commands
 
 ```bash
-kcadm create clients -r demo \
-  -s clientId=alpha \
+# Enable SPIFFE feature (one-time, add to Keycloak startup args)
+--features=token-exchange,spiffe
+
+# Create SPIFFE Identity Provider (one-time per realm)
+kcadm create identity-provider/instances -r spiffe-demo \
+  -s alias=spiffe -s providerId=spiffe \
+  -s config='{"trustDomain":"spiffe://apps.ocp-beta-test.nerc.mghpcc.org",
+    "bundleEndpoint":"https://spire-spiffe-oidc-discovery-provider.<ns>.svc.cluster.local/keys"}'
+
+# Register a client (per agent)
+kcadm create clients -r spiffe-demo \
+  -s clientId=<agent-name> \
+  -s serviceAccountsEnabled=true \
   -s clientAuthenticatorType=federated-jwt \
   -s attributes='{"jwt.credential.issuer":"spiffe",
-    "jwt.credential.sub":"spiffe://example.org/ns/default/sa/alpha"}'
+    "jwt.credential.sub":"spiffe://<trust-domain>/ns/<ns>/sa/<sa>",
+    "standard.token.exchange.enabled":"true"}'
 ```
 
-The config uses `clientAuthMethod: "assertion"` which sends the JWT-SVID
-as a `client_assertion` in the token exchange request body.
+### Fallback: `client_secret` (if SPIFFE feature unavailable)
 
-**Requirement:** Keycloak nightly (`quay.io/keycloak/keycloak:nightly`).
-The `spiffe` identity provider and `federated-jwt` client authenticator
-are not available in stable Keycloak (our cluster runs v26.5.5).
-
-### Current workaround: `client_secret` (stable Keycloak)
-
-Since our Keycloak doesn't have the SPIFFE provider, we pre-registered
-a client with standard `client-secret` authentication:
-
-```bash
-# One-time registration via Keycloak admin API
-curl -X POST "$KEYCLOAK_URL/admin/realms/spiffe-demo/clients" \
-  -H "Authorization: Bearer $ADMIN_TOKEN" \
-  -d '{"clientId":"summarizer-tech-klaviger",
-       "serviceAccountsEnabled":true,
-       "clientAuthenticatorType":"client-secret",
-       "attributes":{"standard.token.exchange.enabled":"true"}}'
-```
-
-The client secret is stored in a Kubernetes Secret and injected as env
-vars. Klaviger's config references them via `${OAUTH_CLIENT_ID}` and
-`${OAUTH_CLIENT_SECRET}`. This required adding `client_secret` as a
-new `clientAuthMethod` in Klaviger's OAuth injector code.
+For Keycloak versions without the SPIFFE preview feature, Klaviger
+also supports `clientAuthMethod: "client_secret"` with `clientId` and
+`clientSecret` fields in the OAuth config. The client secret can be
+injected via env vars from a Kubernetes Secret using the `${VAR_NAME}`
+config expansion syntax.
 
 ## Current state
 
@@ -187,17 +152,15 @@ The deployment is running with **2/2 containers** (agent + klaviger).
 **Working:**
 
 - Klaviger connects to SPIRE via CSI driver, obtains JWT-SVIDs
-- Reverse proxy listens on 8180, forwards to agent on 8000
-- Forward proxy listens on 8181 (localhost only)
-- Agent card is signed and served without authentication
+- Reverse proxy on 8180, forward proxy on 8181 (localhost)
+- Agent card signed and served without authentication
 - Kagenti operator discovers the agent (AgentCard CR created)
 - AuthBridge webhook correctly skips injection
-- Keycloak client registered with `client_secret` auth for token
-  exchange
+- Keycloak SPIFFE IdP + `federated-jwt` configured (no secrets)
 
 **Partially working:**
 
-- Agent card signature verification fails (operator trust config issue)
+- Agent card signature verification fails (operator trust config)
 
 **Not yet tested:**
 
@@ -232,47 +195,23 @@ make deploy-openshift DEV_TAG=my-tag
 
 ### One-time setup (per cluster)
 
-These steps are done once and shared by all Klaviger-based agents:
-
-1. Build and push the Klaviger image (`make podman-build podman-push`)
-1. Apply the `klaviger-sidecar` SCC (`oc apply -f deploy/openshift/base/scc.yaml`)
-1. If using Keycloak nightly: create the SPIFFE identity provider in
-   the realm (see `configure-keycloak.sh` in upstream examples)
+1. Build and push the Klaviger image
+1. Apply the `klaviger-sidecar` SCC
+1. Enable `--features=spiffe` on Keycloak
+1. Create the SPIFFE Identity Provider in the Keycloak realm
 
 ### Per-agent steps
 
-For each new agent deployed with Klaviger:
-
-1. **Register Keycloak client**
-
-   With stable Keycloak (`client_secret`):
+1. **Register Keycloak client** (one `kcadm` call, no secret needed)
 
    ```bash
-   curl -X POST "$KEYCLOAK_URL/admin/realms/$REALM/clients" \
-     -H "Authorization: Bearer $ADMIN_TOKEN" \
-     -d '{"clientId":"<agent-name>",
-          "serviceAccountsEnabled":true,
-          "clientAuthenticatorType":"client-secret",
-          "attributes":{"standard.token.exchange.enabled":"true"}}'
-   ```
-
-   With Keycloak nightly (`federated-jwt`):
-
-   ```bash
-   kcadm create clients -r $REALM \
+   kcadm create clients -r spiffe-demo \
      -s clientId=<agent-name> \
+     -s serviceAccountsEnabled=true \
      -s clientAuthenticatorType=federated-jwt \
      -s attributes='{"jwt.credential.issuer":"spiffe",
-       "jwt.credential.sub":"spiffe://<trust-domain>/ns/<ns>/sa/<sa>"}'
-   ```
-
-1. **Create Kubernetes Secret** (stable Keycloak only)
-
-   ```bash
-   oc create secret generic klaviger-client-secret-<agent> \
-     -n spiffe-demo \
-     --from-literal=client-id=<agent-name> \
-     --from-literal=client-secret=<secret>
+       "jwt.credential.sub":"spiffe://<trust-domain>/ns/<ns>/sa/<sa>",
+       "standard.token.exchange.enabled":"true"}'
    ```
 
 1. **Create Kubernetes manifests** — copy and adapt from
@@ -280,7 +219,7 @@ For each new agent deployed with Klaviger:
    - `serviceaccount.yaml` — new SA name (determines SPIFFE ID)
    - `configmap.yaml` — Klaviger config with correct audience/host rules
    - `agentcard-configmap.yaml` — agent card with correct URL/name
-   - `deployment.yaml` — update image, SA, labels, secret ref
+   - `deployment.yaml` — update image, SA, labels
    - `service.yaml` — new service name
 
 1. **Bind SCC** to the new ServiceAccount
@@ -313,6 +252,4 @@ For each new agent deployed with Klaviger:
 1. Test end-to-end OAuth token exchange through Klaviger forward proxy
 1. Test agent-to-agent communication through Klaviger
 1. Resolve agent card signature verification (operator trust config)
-1. Upgrade Keycloak to nightly to test `federated-jwt` auth
-   (eliminates client secrets entirely)
 1. Expand to additional agents once the pattern is validated
