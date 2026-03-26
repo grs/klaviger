@@ -18,6 +18,8 @@ data:
       spiffe:
         enabled: true
         socketPath: "unix:///spiffe-workload-api/spire-agent.sock"
+        jwtAudience:
+          - "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo"
 
     reverseProxy:
       backend: "http://127.0.0.1:8000"
@@ -39,16 +41,16 @@ data:
           oauth:
             tokenUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/token"
             audience: "summarizer-service-aud"
-            scope: "openid"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
       - hostPattern: "^reviewer-"
         mode:
           type: "oauth"
           oauth:
             tokenUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/token"
             audience: "reviewer-service-aud"
-            scope: "openid"
             cacheTtl: "5m"
+            clientAuthMethod: "assertion"
 
     observability:
       metrics:
