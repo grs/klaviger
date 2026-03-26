@@ -5,10 +5,12 @@ namespace: spiffe-demo
 
 resources:
 - serviceaccount.yaml
+- scc.yaml
+- scc-rolebinding.yaml
 - configmap.yaml
 - deployment.yaml
 - service.yaml
 
 images:
 - name: ghcr.io/pavelanni/klaviger
-  newTag: latest
+  newTag: "3311440"
