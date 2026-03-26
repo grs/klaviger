@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: klaviger-config-summarizer-tech
+  labels:
+    app.kubernetes.io/name: summarizer-tech-klaviger
+data:
+  config.yaml: |
+    server:
+      reverseProxyPort: 8180
+      reverseProxyBind: "0.0.0.0"
+      forwardProxyPort: 8181
+      forwardProxyBind: "127.0.0.1"
+      readTimeout: "30s"
+      writeTimeout: "30s"
+      tls:
+        enabled: false
+      spiffe:
+        enabled: true
+        socketPath: "unix:///spiffe-workload-api/spire-agent.sock"
+
+    reverseProxy:
+      backend: "http://127.0.0.1:8000"
+      verification:
+        mode: "jwt"
+        jwt:
+          jwksUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/certs"
+          issuer: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo"
+          audience: "summarizer-tech-klaviger"
+          cacheTtl: "5m"
+
+    forwardProxy:
+      defaultMode:
+        type: "passthrough"
+      hostRules:
+      - hostPattern: "^summarizer-"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/token"
+            audience: "summarizer-service-aud"
+            scope: "openid"
+            cacheTtl: "5m"
+      - hostPattern: "^reviewer-"
+        mode:
+          type: "oauth"
+          oauth:
+            tokenUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/token"
+            audience: "reviewer-service-aud"
+            scope: "openid"
+            cacheTtl: "5m"
+
+    observability:
+      metrics:
+        enabled: true
+        port: 8190
+        path: "/metrics"
+      tracing:
+        enabled: false
+      logging:
+        level: "debug"
+        format: "json"
