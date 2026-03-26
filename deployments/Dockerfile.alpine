@@ -1,0 +1,27 @@
+# Build stage
+FROM golang:1.24-alpine AS builder
+
+WORKDIR /app
+COPY . .
+
+RUN go mod download
+RUN CGO_ENABLED=0 go build -buildvcs=false -ldflags='-s -w' -o klaviger ./cmd/klaviger/main.go
+
+# Runtime stage
+FROM alpine:3.21
+
+RUN apk --no-cache add ca-certificates
+
+COPY --from=builder /app/klaviger /usr/local/bin/klaviger
+COPY --from=builder /app/examples/configs/kubernetes-auth.yaml /etc/klaviger/config.yaml
+
+RUN adduser -D -u 1001 -g 0 klaviger && \
+    chown -R 1001:0 /etc/klaviger && \
+    chmod -R g=u /etc/klaviger
+
+USER 1001
+
+EXPOSE 8180 8190
+
+ENTRYPOINT ["/usr/local/bin/klaviger"]
+CMD ["--config", "/etc/klaviger/config.yaml"]

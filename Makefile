@@ -95,11 +95,12 @@ docker-buildx:
 	@echo "Multi-platform Docker build complete"
 
 # Podman build (remote, for x86_64)
+DOCKERFILE ?= deployments/Dockerfile.alpine
 podman-build:
 	@echo "Building $(FULL_IMAGE)..."
 	$(CONTAINER_ENGINE) --connection=$(PODMAN_CONNECTION) build \
 		-t $(FULL_IMAGE) \
-		-f deployments/Dockerfile .
+		-f $(DOCKERFILE) .
 	@echo "Build complete: $(FULL_IMAGE)"
 
 # Push to GHCR
