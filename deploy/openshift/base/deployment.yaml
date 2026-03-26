@@ -23,6 +23,9 @@ spec:
       labels:
         app.kubernetes.io/name: summarizer-tech-klaviger
         app.kubernetes.io/component: agent
+        kagenti.io/type: agent
+        kagenti.io/inject: disabled
+        kagenti.io/spire: enabled
         kagenti.io/framework: Python
         kagenti.io/workload-type: deployment
         protocol.kagenti.io/a2a: ""
