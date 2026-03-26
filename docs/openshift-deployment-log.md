@@ -75,15 +75,20 @@ proxy-init, envoy-proxy, spiffe-helper, and client-registration into
 the pod — defeating the purpose of using Klaviger instead.
 
 The webhook matches all pods in namespaces with `kagenti-enabled: true`
-(which `spiffe-demo` has). Setting `kagenti.io/inject: disabled` as a
-label or annotation did not prevent injection.
+(which `spiffe-demo` has). It checks `kagenti.io/type: agent` on pod
+labels to decide if a pod is eligible for injection.
 
-**Solution:** The webhook triggers on pods with the
-`kagenti.io/type: agent` label. Removing this label from the **pod
-template** (while keeping it on the Deployment metadata for operator
-discovery) prevented injection. This is the key insight: the
-Deployment-level labels are used by the Kagenti operator for discovery,
-but the pod-level labels trigger the webhook.
+**Solution:** Set `kagenti.io/inject: disabled` on pod template labels.
+The webhook code in `pod_mutator.go` (line 122-127) checks for this
+value and skips injection. The `kagenti.io/type: agent` label must
+remain on the pod template so the Kagenti operator can discover the
+agent and manage its AgentCard.
+
+**Key code path** (from kagenti-webhook source):
+
+1. Check `kagenti.io/type` — must be `agent` or `tool`, otherwise skip
+1. Check `kagenti.io/inject` — if `disabled`, skip injection
+1. Evaluate per-sidecar precedence chain
 
 ### Agent card endpoint blocked by JWT verification
 
@@ -96,6 +101,39 @@ blocked agent discovery by the Kagenti operator.
 proxied to the backend without authentication, following the same
 pattern already used for `/health/` endpoints.
 
+### Agent card signature verification
+
+**Problem:** The Kagenti operator discovers the agent, creates an
+AgentCard CR, and fetches the card successfully. The card is signed by
+the `sign-agentcard` init container using the pod's SPIFFE identity.
+However, the operator fails signature verification with:
+
+```text
+No signature verified via x5c chain validation
+```
+
+The SPIFFE ID in the signing certificate is
+`spiffe://...sa/summarizer-tech-klaviger` (based on the ServiceAccount
+name). The operator's x5c chain validation does not trust this identity.
+
+**Status:** Open. This is an operator/SPIRE trust configuration issue,
+not a Klaviger issue. The operator needs to be configured to trust the
+SPIFFE identity of the new ServiceAccount, or the SPIRE trust bundle
+configuration needs to include it. The existing agents work because
+their SPIFFE identities are already trusted.
+
+**Operator log evidence:**
+
+```text
+Fetching A2A agent card  url=http://summarizer-tech-klaviger...8080/.well-known/agent-card.json
+Signature verification failed  reason=SignatureInvalid  details=No signature verified via x5c chain validation
+Identity binding is allowlist-only; SPIFFE trust bundle verification not yet available
+```
+
+The message "Identity binding is allowlist-only" suggests the operator
+maintains an explicit allowlist of trusted identities rather than
+trusting the full SPIRE trust bundle.
+
 ## Current state
 
 The deployment is running with **2/2 containers** (agent + klaviger).
@@ -106,7 +144,12 @@ The deployment is running with **2/2 containers** (agent + klaviger).
 - Reverse proxy listens on 8180, forwards to agent on 8000
 - Forward proxy listens on 8181 (localhost only)
 - Agent card is signed and served without authentication
-- Kagenti operator discovers the agent
+- Kagenti operator discovers the agent (AgentCard CR created)
+- AuthBridge webhook correctly skips injection
+
+**Partially working:**
+
+- Agent card signature verification fails (operator trust config issue)
 
 **Not yet tested:**
 
@@ -145,4 +188,5 @@ make deploy-openshift DEV_TAG=my-tag
 1. Test end-to-end agent communication through Klaviger
 1. If Keycloak requires client credentials, either pre-register a
    client or add client credentials support to Klaviger's OAuth injector
+1. Resolve agent card signature verification (operator trust config)
 1. Expand to additional agents once the pattern is validated
