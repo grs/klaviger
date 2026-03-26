@@ -398,8 +398,8 @@ func validateOAuth(context string, cfg *OAuthConfig) error {
 
 	// Validate client auth method if specified
 	if cfg.ClientAuthMethod != "" {
-		if cfg.ClientAuthMethod != "header" && cfg.ClientAuthMethod != "assertion" {
-			return fmt.Errorf("%s: oauth.clientAuthMethod must be 'header' or 'assertion' (got: %s)", context, cfg.ClientAuthMethod)
+		if cfg.ClientAuthMethod != "header" && cfg.ClientAuthMethod != "assertion" && cfg.ClientAuthMethod != "client_secret" {
+			return fmt.Errorf("%s: oauth.clientAuthMethod must be 'header', 'assertion', or 'client_secret' (got: %s)", context, cfg.ClientAuthMethod)
 		}
 	}
 

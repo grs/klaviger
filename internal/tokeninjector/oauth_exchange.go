@@ -28,8 +28,10 @@ type OAuthInjector struct {
 	cache            *util.TokenCache
 	httpClient       *http.Client
 	logger           *zap.Logger
-	clientAuthMethod string // "header" or "assertion"
+	clientAuthMethod  string // "header", "assertion", or "client_secret"
 	includeActorToken bool   // Send auth token as actor_token per RFC 8693
+	clientID          string // Client ID for client_secret auth
+	clientSecret      string // Client secret for client_secret auth
 
 	// SPIFFE JWT-SVID source for authentication (optional)
 	jwtSource    *spiffe.JWTSource
@@ -85,6 +87,8 @@ func NewOAuthInjector(cfg *config.OAuthConfig, serverCfg *config.ServerConfig, l
 		k8sTokenPath:      k8sTokenPath,
 		clientAuthMethod:  clientAuthMethod,
 		includeActorToken: includeActorToken,
+		clientID:          cfg.ClientID,
+		clientSecret:      cfg.ClientSecret,
 	}
 
 	// Check if SPIFFE is enabled at server level
@@ -265,16 +269,19 @@ func (i *OAuthInjector) exchangeToken(ctx context.Context, subjectToken string) 
 	}
 
 	// Add client authentication based on configured method
-	if i.clientAuthMethod == "assertion" {
+	switch i.clientAuthMethod {
+	case "assertion":
 		// Use client_assertion in request body
 		data.Set("client_assertion", authToken)
-
-		// Set client_assertion_type based on whether SPIFFE is enabled
 		if i.jwtSource != nil {
 			data.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-spiffe")
 		} else {
 			data.Set("client_assertion_type", "urn:ietf:params:oauth:client-assertion-type:jwt-bearer")
 		}
+	case "client_secret":
+		// Use client_id and client_secret in request body
+		data.Set("client_id", i.clientID)
+		data.Set("client_secret", i.clientSecret)
 	}
 
 	// Create request

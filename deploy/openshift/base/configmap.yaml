@@ -42,7 +42,9 @@ data:
             tokenUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/token"
             audience: "summarizer-service-aud"
             cacheTtl: "5m"
-            clientAuthMethod: "assertion"
+            clientAuthMethod: "client_secret"
+            clientId: "${OAUTH_CLIENT_ID}"
+            clientSecret: "${OAUTH_CLIENT_SECRET}"
       - hostPattern: "^reviewer-"
         mode:
           type: "oauth"
@@ -50,7 +52,9 @@ data:
             tokenUrl: "https://keycloak-spiffe-demo.apps.ocp-beta-test.nerc.mghpcc.org/realms/spiffe-demo/protocol/openid-connect/token"
             audience: "reviewer-service-aud"
             cacheTtl: "5m"
-            clientAuthMethod: "assertion"
+            clientAuthMethod: "client_secret"
+            clientId: "${OAUTH_CLIENT_ID}"
+            clientSecret: "${OAUTH_CLIENT_SECRET}"
 
     observability:
       metrics:
