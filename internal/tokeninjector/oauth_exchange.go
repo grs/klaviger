@@ -29,6 +29,7 @@ type OAuthInjector struct {
 	httpClient       *http.Client
 	logger           *zap.Logger
 	clientAuthMethod string // "header" or "assertion"
+	includeActorToken bool   // Send auth token as actor_token per RFC 8693
 
 	// SPIFFE JWT-SVID source for authentication (optional)
 	jwtSource    *spiffe.JWTSource
@@ -65,18 +66,25 @@ func NewOAuthInjector(cfg *config.OAuthConfig, serverCfg *config.ServerConfig, l
 		clientAuthMethod = "header"
 	}
 
+	// Determine if actor token should be included (default: true)
+	includeActorToken := true
+	if cfg.IncludeActorToken != nil {
+		includeActorToken = *cfg.IncludeActorToken
+	}
+
 	injector := &OAuthInjector{
-		tokenURL:         cfg.TokenURL,
-		audience:         cfg.Audience,
-		scope:            cfg.Scope,
-		cacheTTL:         time.Duration(cfg.CacheTTL),
-		cache:            util.NewTokenCache(logger.With(zap.String("component", "oauth_token_cache"))),
+		tokenURL:          cfg.TokenURL,
+		audience:          cfg.Audience,
+		scope:             cfg.Scope,
+		cacheTTL:          time.Duration(cfg.CacheTTL),
+		cache:             util.NewTokenCache(logger.With(zap.String("component", "oauth_token_cache"))),
 		httpClient: &http.Client{
 			Timeout: 10 * time.Second,
 		},
-		logger:           logger.With(zap.String("component", "oauth_injector")),
-		k8sTokenPath:     k8sTokenPath,
-		clientAuthMethod: clientAuthMethod,
+		logger:            logger.With(zap.String("component", "oauth_injector")),
+		k8sTokenPath:      k8sTokenPath,
+		clientAuthMethod:  clientAuthMethod,
+		includeActorToken: includeActorToken,
 	}
 
 	// Check if SPIFFE is enabled at server level
@@ -93,6 +101,7 @@ func NewOAuthInjector(cfg *config.OAuthConfig, serverCfg *config.ServerConfig, l
 			zap.String("socketPath", serverCfg.SPIFFE.SocketPath),
 			zap.String("clientAuthMethod", clientAuthMethod),
 			zap.Strings("jwtAudience", jwtAudience),
+			zap.Bool("includeActorToken", includeActorToken),
 		)
 
 		ctx := context.Background()
@@ -112,6 +121,7 @@ func NewOAuthInjector(cfg *config.OAuthConfig, serverCfg *config.ServerConfig, l
 		logger.Info("Configuring OAuth injector to use client token for authentication",
 			zap.String("tokenPath", k8sTokenPath),
 			zap.String("clientAuthMethod", clientAuthMethod),
+			zap.Bool("includeActorToken", includeActorToken),
 		)
 	}
 
@@ -246,6 +256,12 @@ func (i *OAuthInjector) exchangeToken(ctx context.Context, subjectToken string) 
 
 	if i.scope != "" {
 		data.Set("scope", i.scope)
+	}
+
+	// Include actor token per RFC 8693 if enabled
+	if i.includeActorToken {
+		data.Set("actor_token", authToken)
+		data.Set("actor_token_type", "urn:ietf:params:oauth:token-type:jwt")
 	}
 
 	// Add client authentication based on configured method

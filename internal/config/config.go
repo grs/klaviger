@@ -129,12 +129,13 @@ type FileConfig struct {
 
 // OAuthConfig holds OAuth token exchange configuration
 type OAuthConfig struct {
-	TokenURL        string   `yaml:"tokenUrl"`
-	Audience        string   `yaml:"audience"`
-	Scope           string   `yaml:"scope"`
-	CacheTTL        Duration `yaml:"cacheTtl"`
-	ClientTokenPath string   `yaml:"clientTokenPath,omitempty"` // Path to client token for OAuth authentication (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
-	ClientAuthMethod string  `yaml:"clientAuthMethod,omitempty"` // How to present client token: "header" or "assertion" (default: "header")
+	TokenURL         string   `yaml:"tokenUrl"`
+	Audience         string   `yaml:"audience"`
+	Scope            string   `yaml:"scope"`
+	CacheTTL         Duration `yaml:"cacheTtl"`
+	ClientTokenPath  string   `yaml:"clientTokenPath,omitempty"`  // Path to client token for OAuth authentication (default: /var/run/secrets/kubernetes.io/serviceaccount/token)
+	ClientAuthMethod string   `yaml:"clientAuthMethod,omitempty"` // How to present client token: "header" or "assertion" (default: "header")
+	IncludeActorToken *bool   `yaml:"includeActorToken,omitempty"` // Send authentication token as actor_token in request body per RFC 8693 (default: true)
 }
 
 // VaultConfig holds Vault token injection configuration
@@ -272,6 +273,10 @@ func setDefaults(cfg *Config) {
 		if cfg.ForwardProxy.HostRules[i].Mode.OAuth != nil {
 			if cfg.ForwardProxy.HostRules[i].Mode.OAuth.CacheTTL == 0 {
 				cfg.ForwardProxy.HostRules[i].Mode.OAuth.CacheTTL = Duration(10 * time.Minute)
+			}
+			if cfg.ForwardProxy.HostRules[i].Mode.OAuth.IncludeActorToken == nil {
+				trueVal := true
+				cfg.ForwardProxy.HostRules[i].Mode.OAuth.IncludeActorToken = &trueVal
 			}
 		}
 	}

@@ -46,7 +46,7 @@ Then in another terminal:
  curl --header "Authorization: Bearer $TOKEN" localhost:8080/beta/gamma/delta
 ```
 
-The response should be something like this:
+By default, Keycloak does not yet include the actor in the returned token so you should see something like the following:
 
 ```
 alpha called with path /beta/gamma/delta, subject 76df2bb9-296a-4e27-8f00-37151aba17cf, audience delta,gamma,beta,alpha,account, scopes profile beta delta gamma email alpha
@@ -59,6 +59,19 @@ This shows that each service in the sequence of calls receives a
 different token, with the audience scoped just to that service, and the original
 subject.
 
+However if you use the keycloak SPI from
+https://github.com/redhat-et/keycloak-act-claim-spi/, which you can do
+using the image in keycloak-act-claims.yaml instead of keycloak.yaml
+above, then the actor claim is included and you get something like:
+
+```
+alpha called with path /beta/gamma/delta, subject d839780d-b7f1-4768-8604-8f143efb10bd, audience gamma,beta,alpha,delta,account, scopes profile delta email beta alpha gamma
+beta called with path /gamma/delta, subject d839780d-b7f1-4768-8604-8f143efb10bd, audience beta, scopes profile delta email beta alpha gamma, actor system:serviceaccount:default:alpha
+gamma called with path /delta, subject d839780d-b7f1-4768-8604-8f143efb10bd, audience gamma, scopes profile delta email beta alpha gamma, actor system:serviceaccount:default:beta
+delta called with path /, subject d839780d-b7f1-4768-8604-8f143efb10bd, audience delta, scopes profile delta email beta alpha gamma, actor system:serviceaccount:default:gamma
+```
+
+This shows the actor in each token.
 
 ## What Changed From Baseline?
 
