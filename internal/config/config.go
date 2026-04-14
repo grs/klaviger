@@ -343,6 +343,10 @@ func (cfg *Config) Sanitize() *Config {
 		sanitized.ReverseProxy.Verification.Introspection = &introspection
 	}
 
+	// Deep copy HostRules slice to avoid mutating the original config
+	sanitized.ForwardProxy.HostRules = make([]HostRule, len(cfg.ForwardProxy.HostRules))
+	copy(sanitized.ForwardProxy.HostRules, cfg.ForwardProxy.HostRules)
+
 	// Sanitize forward proxy injection modes
 	for i := range sanitized.ForwardProxy.HostRules {
 		if sanitized.ForwardProxy.HostRules[i].Mode.Vault != nil {
