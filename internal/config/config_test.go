@@ -394,6 +394,39 @@ func TestSanitize(t *testing.T) {
 	assert.Equal(t, "super-secret", cfg.ReverseProxy.Verification.Introspection.ClientSecret)
 }
 
+func TestSanitizePreservesOAuthClientSecret(t *testing.T) {
+	cfg := &Config{
+		ForwardProxy: ForwardProxyConfig{
+			HostRules: []HostRule{
+				{
+					HostPattern: "^beta(:|$)",
+					Mode: InjectionMode{
+						Type: "oauth",
+						OAuth: &OAuthConfig{
+							TokenURL:         "http://keycloak:8080/token",
+							Audience:         "beta",
+							ClientAuthMethod: "client_secret",
+							ClientID:         "alpha",
+							ClientSecret:     "my-secret-123",
+						},
+					},
+				},
+			},
+		},
+	}
+
+	// Sanitize should redact the secret in the copy
+	sanitized := cfg.Sanitize()
+	assert.Equal(t, "***REDACTED***", sanitized.ForwardProxy.HostRules[0].Mode.OAuth.ClientSecret)
+
+	// The original config must retain the real secret.
+	// Before the fix, Sanitize() mutated the original because Go slice
+	// shallow copies share the backing array. The loop replaced the OAuth
+	// pointer in the shared slice element, corrupting the live config.
+	assert.Equal(t, "my-secret-123", cfg.ForwardProxy.HostRules[0].Mode.OAuth.ClientSecret,
+		"Sanitize() must not mutate the original config's OAuth ClientSecret")
+}
+
 func TestRedactSecret(t *testing.T) {
 	tests := []struct {
 		name  string
